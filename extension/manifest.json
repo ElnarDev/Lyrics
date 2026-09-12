@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Lyrics for YouTube Music",
+  "version": "0.1.0",
+  "description": "Envía la pista actual de YouTube Music a Lyrics local.",
+  "content_scripts": [
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

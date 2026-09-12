@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Lyrics</title>
+  </head>
+  <body>
+    <main id="overlay">
+      <header id="drag-region">
+        <div>
+          <strong id="title">Lyrics</strong
+          ><span id="artist">Esperando YouTube Music</span><small id="source">Letras de demostración</small>
+        </div>
+        <button id="hide" aria-label="Ocultar">×</button>
+      </header>
+      <section id="lyrics" aria-live="polite">Cargando letras sincronizadas…</section>
+      <footer>
+        <button id="smaller" aria-label="Reducir letra">−</button
+        ><input
+          id="opacity"
+          type="range"
+          min="35"
+          max="100"
+          value="92"
+          aria-label="Opacidad"
+        /><button id="larger" aria-label="Aumentar letra">+</button><button id="sync-back" aria-label="Retrasar sincronía">‹</button><span id="sync">0.0 s</span><button id="sync-forward" aria-label="Adelantar sincronía">›</button>
+      </footer>
+      <div class="resize-grip left" aria-label="Redimensionar desde la izquierda"></div>
+      <div class="resize-grip right" aria-label="Redimensionar desde la derecha"></div>
+    </main>
+    <script src="../shared/demo-lyrics.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

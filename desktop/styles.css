@@ -1,0 +1,118 @@
+:root {
+    --font-size: 27px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: transparent;
+}
+
+body {
+    margin: 0;
+    color: #fff;
+    font-family: Inter, system-ui, sans-serif;
+    background: transparent;
+    overflow: hidden;
+}
+
+#overlay {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    padding: 14px;
+    border: 1px solid rgba(255, 255, 255, .22);
+    border-radius: 20px;
+    background: #100d1b;
+    backdrop-filter: blur(16px);
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    cursor: move;
+    user-select: none;
+    -webkit-app-region: drag;
+}
+
+header button { -webkit-app-region: no-drag; }
+
+#title,
+#artist,
+#source {
+    display: block;
+}
+
+#artist,
+#source {
+    margin-top: 3px;
+    color: #cfc8e9;
+    font-size: 12px;
+}
+
+#source { color: #aa9bcf; }
+
+button {
+    color: #fff;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .13);
+    cursor: pointer;
+    font-size: 20px;
+}
+
+#hide {
+    width: 30px;
+    height: 30px;
+}
+
+#lyrics {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+    overflow: hidden;
+    min-height: 0;
+    padding: 20px 8px;
+    text-align: center;
+}
+
+.line {
+    color: rgba(255, 255, 255, .36);
+    font-size: var(--font-size);
+    font-weight: 650;
+    line-height: 1.16;
+    transition: color .35s, transform .35s, opacity .35s;
+}
+
+.line.active {
+    color: #fff;
+    transform: scale(1.04);
+    text-shadow: 0 0 24px rgba(176, 127, 255, .7);
+}
+
+footer {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+footer button {
+    width: 34px;
+    height: 30px;
+}
+
+input {
+    accent-color: #b87cff;
+    width: 120px;
+}
+
+#sync { min-width: 34px; color: #cfc8e9; font-size: 11px; text-align: center; }
+
+.resize-grip { position: absolute; bottom: 0; width: 28px; height: 28px; -webkit-app-region: no-drag; z-index: 5; }
+.resize-grip.left { left: 0; cursor: nesw-resize; }
+.resize-grip.right { right: 0; cursor: nwse-resize; }
