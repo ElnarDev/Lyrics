@@ -3,6 +3,7 @@ let lines = [];
 let lyricStatus = "waiting";
 let compactMode = false;
 const lyricsEl = document.querySelector("#lyrics");
+const overlayEl = document.querySelector("#overlay");
 const statusText = {
   waiting: "Esperando YouTube Music…",
   loading: "Buscando letras sincronizadas…",
@@ -15,13 +16,22 @@ const statusText = {
   error: "No se pudieron cargar las letras. Reintenta desde el icono de Lyrics.",
 };
 function activeIndex() { return lines.reduce((index, line, i) => (line.time <= currentTime ? i : index), 0); }
+function updateCompactHeight() {
+  if (!compactMode) return;
+  requestAnimationFrame(() => {
+    if (!compactMode) return;
+    const style = getComputedStyle(overlayEl);
+    const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    window.lyrics.setCompactContentHeight(Math.ceil(lyricsEl.scrollHeight + verticalPadding));
+  });
+}
 function render() {
   if (!lines.length) {
     const message = document.createElement("div");
     message.className = "status-message";
     message.textContent = statusText[lyricStatus] || statusText.error;
     lyricsEl.replaceChildren(message);
-    if (compactMode) requestAnimationFrame(() => window.lyrics.setCompactContentHeight(Math.ceil(lyricsEl.scrollHeight + 24)));
+    updateCompactHeight();
     return;
   }
   const active = activeIndex();
@@ -36,9 +46,7 @@ function render() {
       return el;
     }),
   );
-  if (compactMode) {
-    requestAnimationFrame(() => window.lyrics.setCompactContentHeight(Math.ceil(lyricsEl.scrollHeight + 24)));
-  }
+  updateCompactHeight();
 }
 window.lyrics.onCompactMode((enabled) => {
   compactMode = enabled;

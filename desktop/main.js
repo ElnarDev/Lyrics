@@ -7,20 +7,21 @@ const { PlayerSources } = require("./player-sources");
 const { lyricsErrorStatus } = require("./lyrics-errors");
 const { findLyrics: requestLyrics } = require("./lyrics-provider");
 const { LyricsCache } = require("./lyrics-cache");
+const { createLyricsSession } = require("./lyrics-session");
 const { restoreNormalBounds } = require("./window-bounds");
+const { restoreWindowState, loadWindowState, saveWindowState } = require("./window-state");
 const { isUsableWindow, sendToWindow, showOrCreateWindow, toggleOrCreateWindow } = require("./window-lifecycle");
 const { AUTH_TIMEOUT_MS, loadOrCreateBridgeToken, isValidBridgeAuth } = require("./bridge-auth");
 let mainWindow;
 let tray;
 let isQuitting = false;
 const lyricCache = new LyricsCache();
-let activeTrackKey = "";
-let activeLookupRevision = 0;
 let compactMode = false;
 let normalBounds;
 let retryCurrentLyrics = () => {};
 let replayCurrentPlayer = () => {};
 let bridgeToken;
+let windowStateTimer;
 const overlayUrl = pathToFileURL(path.join(__dirname, "index.html")).href;
 
 function isTrustedOverlayEvent(event) {
@@ -54,13 +55,19 @@ async function findLyrics(track) {
   return lyricCache.get(key, () => requestLyrics(track));
 }
 function createWindow() {
-  compactMode = false;
-  normalBounds = undefined;
+  const restored = restoreWindowState(
+    loadWindowState(app.getPath("userData")),
+    screen.getAllDisplays().map((display) => display.workArea),
+    screen.getPrimaryDisplay().workArea,
+  );
+  compactMode = restored?.compactMode || false;
+  normalBounds = restored?.normalBounds;
   const window = mainWindow = new BrowserWindow({
-    width: 520,
-    height: 430,
+    width: restored?.bounds.width || 520,
+    height: restored?.bounds.height || 430,
+    ...(restored ? { x: restored.bounds.x, y: restored.bounds.y } : {}),
     minWidth: 360,
-    minHeight: 260,
+    minHeight: compactMode ? 80 : 260,
     frame: false,
     title: "",
     transparent: true,
@@ -95,12 +102,29 @@ function createWindow() {
       window.setShape(roundedWindowShape(width, height));
     }
   };
+  const persistWindowState = () => {
+    if (!isUsableWindow(window)) return;
+    const bounds = window.getBounds();
+    const normal = compactMode ? normalBounds : bounds;
+    if (!saveWindowState(app.getPath("userData"), { compactMode, bounds, normalBounds: normal })) {
+      console.warn("Could not save Lyrics window position");
+    }
+  };
+  const scheduleWindowStateSave = () => {
+    clearTimeout(windowStateTimer);
+    windowStateTimer = setTimeout(persistWindowState, 300);
+  };
   refreshShape();
-  window.on("resize", refreshShape);
+  window.on("resize", () => {
+    refreshShape();
+    scheduleWindowStateSave();
+  });
+  window.on("move", scheduleWindowStateSave);
   window.setAlwaysOnTop(true, "screen-saver");
   window.loadFile(path.join(__dirname, "index.html"));
   window.webContents.on("did-finish-load", () => {
     hideSystemTitle();
+    if (compactMode) sendToWindow(window, "compact-mode", true);
     replayCurrentPlayer();
   });
   window.on("focus", hideSystemTitle);
@@ -109,12 +133,15 @@ function createWindow() {
     console.log("Overlay:", message),
   );
   window.on("close", (event) => {
+    clearTimeout(windowStateTimer);
+    persistWindowState();
     if (!isQuitting) {
       event.preventDefault();
       if (isUsableWindow(window)) window.hide();
     }
   });
   window.on("closed", () => {
+    clearTimeout(windowStateTimer);
     if (mainWindow === window) mainWindow = undefined;
   });
 }
@@ -134,7 +161,13 @@ function setCompactMode(enabled) {
     const display = screen.getDisplayNearestPoint({ x: compactBounds.x, y: compactBounds.y });
     mainWindow.setBounds(restoreNormalBounds(normalBounds, compactBounds, display.workArea));
     mainWindow.setMinimumSize(360, 260);
+    normalBounds = mainWindow.getBounds();
   }
+  saveWindowState(app.getPath("userData"), {
+    compactMode,
+    bounds: mainWindow.getBounds(),
+    normalBounds: compactMode ? normalBounds : mainWindow.getBounds(),
+  });
   sendToWindow(mainWindow, "compact-mode", compactMode);
 }
 function createTray() {
@@ -162,48 +195,21 @@ function createTray() {
 }
 function startBridge() {
   const sources = new PlayerSources();
-  let displayedSource = null;
-  const showSelectedPlayer = (selected, updatedSource = null, forceLookup = false) => {
-    const source = selected?.source ?? null;
-    if (source === displayedSource && source !== updatedSource) return;
-    displayedSource = source;
-    if (!selected) {
-      activeTrackKey = "";
-      activeLookupRevision += 1;
-      sendToWindow(mainWindow, "player-update", { title: "", artist: "", currentTime: 0, paused: true });
-      sendToWindow(mainWindow, "lyrics-update", { lines: [], status: "waiting" });
-      return;
-    }
-    const player = selected.player;
-    sendToWindow(mainWindow, "player-update", player);
-    const key = trackKey(player);
-    if (forceLookup) lyricCache.delete(key);
-    if (key === activeTrackKey && !forceLookup) return;
-    activeTrackKey = key;
-    const revision = ++activeLookupRevision;
-    sendToWindow(mainWindow, "lyrics-update", { lines: [], status: "loading" });
-    findLyrics(player).then((result) => {
-      if (activeTrackKey === key && activeLookupRevision === revision) {
-        sendToWindow(mainWindow, "lyrics-update", {
-          lines: result.lines,
-          status: result.mode === "missing" ? "not-found" : result.mode === "unsynced-only" ? "not-synced" : result.mode === "ambiguous" ? "ambiguous" : "ready",
-          mode: result.mode,
-        });
-      }
-    }).catch((error) => {
-      console.warn("Lyrics lookup failed:", error.message);
-      if (activeTrackKey === key && activeLookupRevision === revision) {
-        sendToWindow(mainWindow, "lyrics-update", { lines: [], status: lyricsErrorStatus(error) });
-      }
-    });
-  };
+  const session = createLyricsSession({
+    lookup: findLyrics,
+    trackKey,
+    send: (channel, payload) => sendToWindow(mainWindow, channel, payload),
+    invalidate: (key) => lyricCache.delete(key),
+    errorStatus: lyricsErrorStatus,
+    warn: (error) => console.warn("Lyrics lookup failed:", error.message),
+  });
+  const { showSelectedPlayer } = session;
   retryCurrentLyrics = () => {
     const selected = sources.select();
     if (selected) showSelectedPlayer(selected, selected.source, true);
   };
   replayCurrentPlayer = () => {
-    activeTrackKey = "";
-    displayedSource = null;
+    session.reset();
     const selected = sources.select();
     if (selected) showSelectedPlayer(selected, selected.source);
   };
@@ -261,6 +267,24 @@ function startApp() {
   createWindow();
   createTray();
   startBridge();
+  const recoverWindowAfterDisplayChange = () => {
+    setImmediate(() => {
+      if (!isUsableWindow(mainWindow)) return;
+      const bounds = mainWindow.getBounds();
+      const restored = restoreWindowState(
+        { version: 1, compactMode, bounds, normalBounds: compactMode ? normalBounds : bounds },
+        screen.getAllDisplays().map((display) => display.workArea),
+        screen.getPrimaryDisplay().workArea,
+      );
+      if (!restored) return;
+      normalBounds = restored.normalBounds;
+      if (Object.keys(bounds).some((key) => bounds[key] !== restored.bounds[key])) {
+        mainWindow.setBounds(restored.bounds);
+      }
+    });
+  };
+  screen.on("display-removed", recoverWindowAfterDisplayChange);
+  screen.on("display-metrics-changed", recoverWindowAfterDisplayChange);
   if (!globalShortcut.register("CommandOrControl+Alt+C", () => setCompactMode(!compactMode))) {
     console.warn("Compact mode shortcut unavailable");
   }

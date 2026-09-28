@@ -42,7 +42,7 @@ Esta es la lista de trabajo para pasar del prototipo funcional a una aplicación
 
 ### Comportamiento de uso diario
 
-- [ ] **Guardar preferencias locales.** Restaurar posición, dimensiones, opacidades, tamaño de letra y modo compacto al reiniciar. Si cambia la configuración de monitores, recuperar una ventana que haya quedado fuera de pantalla.
+- [x] **Guardar preferencias locales.** Se restauran posición, dimensiones, opacidades, tamaño de letra y modo compacto. La geometría se ajusta al área visible al iniciar o cuando cambia la configuración de monitores. Evidencia: `desktop/window-state.js`, `test/window-state.test.js` y archivo local creado en un arranque real; queda prueba manual con desconexión física de monitor antes de la beta.
 - [ ] **Optimizar la extensión.** Reducir el sondeo frecuente y la observación de todo el documento; medir CPU y memoria durante una sesión larga sin perder cambios de canción.
 - [x] **Controlar la caché de letras.** Máximo 200 canciones con expulsión LRU; resultados sincronizados durante una hora, ausencias durante cinco minutos y coincidencias ambiguas durante dos. Las consultas simultáneas se comparten y los errores temporales no se guardan. Evidencia: `desktop/lyrics-cache.js` y `test/lyrics-cache.test.js`.
 - [ ] **Revisar accesibilidad y control.** Atajos documentados, alternativa si Ctrl+Alt+C está ocupado, controles legibles, contraste suficiente y salida fácil del modo compacto.
@@ -50,8 +50,8 @@ Esta es la lista de trabajo para pasar del prototipo funcional a una aplicación
 
 ### Pruebas y mantenimiento
 
-- [ ] **Añadir pruebas automatizadas del comportamiento crítico.** Cubrir parseo de letras, selección de coincidencias, cambio rápido de pista, respuestas tardías, reconexión y estados de error. El chequeo actual solo valida sintaxis.
-- [ ] **Crear un flujo de integración continua.** Ejecutar validación y pruebas en cada cambio; generar artefactos de versión de forma reproducible y registrar el resultado.
+- [x] **Añadir pruebas automatizadas del comportamiento crítico.** Se cubren parseo y selección de letras, reconexión, estados de error, selección entre pestañas, preferencias, recursos de la extensión y cambios rápidos de pista con respuestas tardías, reintentos y reapertura de ventana. Evidencia: `test/lyrics-session.test.js` y 49 pruebas locales correctas. La regresión con Chrome real sigue pendiente como puerta de la beta.
+- [ ] **Crear un flujo de integración continua.** Base en `.github/workflows/ci.yml`: Windows con Node 22 y 24, instalación desde el archivo de bloqueo, sintaxis, pruebas y auditoría de dependencias. Falta observar la primera ejecución en GitHub y añadir la generación reproducible del instalador cuando esté definido.
 - [ ] **Separar responsabilidades del código.** Mantener módulos claros para puente local, detección de pista, proveedor/caché, estado de reproducción y ventana. Documentar el contrato de mensajes entre extensión y app.
 - [ ] **Preparar soporte y diagnóstico con privacidad.** Registrar errores útiles sin guardar letras ni hábitos de escucha innecesariamente; ofrecer al usuario una manera de reportar incidencias y conocer la versión instalada.
 
@@ -81,3 +81,6 @@ Anota aquí, para cada casilla completada, la fecha, versión y evidencia (prueb
 | Coincidencia de versión | 27-09-2026 | `test/lyrics-provider.test.js` verifica álbum, duración y ambigüedad; falta prueba manual con Chrome antes de la beta. |
 | Dependencias | 27-09-2026 | `docs/DEPENDENCY_REVIEW.md`; Electron 44.4.5, ws 8.21.3, auditoría en línea sin vulnerabilidades, `npm run check` y 30 pruebas correctas, arranque visual de la ventana. |
 | Caché de letras | 27-09-2026 | `desktop/lyrics-cache.js` y `test/lyrics-cache.test.js`; límite LRU, caducidad diferenciada, consultas simultáneas compartidas y fallos no persistidos. 39 pruebas correctas. |
+| Preferencias de ventana | 27-09-2026 | `desktop/window-state.js` y `test/window-state.test.js`; geometría, modo compacto y recuperación al retirar monitor. Arranque real creó `window-state.json`; 44 pruebas correctas. |
+| Base de integración continua | 27-09-2026 | `.github/workflows/ci.yml` y `test/extension-package.test.js`; 45 pruebas locales correctas. No equivale todavía a una ejecución remota ni a un artefacto instalable. |
+| Cambios rápidos de pista | 27-09-2026 | `desktop/lyrics-session.js` y cuatro casos de `test/lyrics-session.test.js`; una respuesta tardía, un reintento anterior o una consulta de ventana previa no reemplazan las letras actuales. `npm run check` y 49 pruebas correctas. |

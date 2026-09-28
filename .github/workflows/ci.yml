@@ -1,0 +1,40 @@
+name: Validación
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Windows · Node ${{ matrix.node }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v7.0.1
+      - name: Preparar Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Instalar dependencias del archivo de bloqueo
+        run: npm ci --ignore-scripts
+      - name: Comprobar sintaxis
+        run: npm run check
+      - name: Ejecutar pruebas
+        run: npm test
+      - name: Revisar avisos de dependencias
+        if: matrix.node == 24
+        run: npm audit --audit-level=moderate
