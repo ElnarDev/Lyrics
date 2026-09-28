@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estado de Lyrics</title>
+  <style>
+    body { width: 280px; padding: 16px; margin: 0; background: #151221; color: #f6f3ff; font: 13px system-ui, sans-serif; }
+    h1 { font-size: 17px; margin: 0 0 9px; }
+    p { line-height: 1.45; color: #cbc4df; }
+    label { display: block; margin: 12px 0 5px; }
+    input { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #8779ac; border-radius: 6px; background: #262037; color: white; }
+    button { margin-top: 10px; padding: 8px 12px; border: 0; border-radius: 6px; color: #160d24; background: #ba79ff; cursor: pointer; }
+    button.secondary { background: #342c48; color: #e9e2f5; }
+    [hidden] { display: none !important; }
+    #status { min-height: 18px; }
+  </style>
+</head>
+<body>
+  <h1 id="heading">Vincular Lyrics</h1>
+  <p id="instructions">En el icono de Lyrics de la bandeja de Windows, elige «Copiar clave de vinculación». Pégala aquí una sola vez.</p>
+  <form id="pair-form">
+    <label for="bridge-token">Clave de vinculación</label>
+    <input id="bridge-token" type="password" autocomplete="off" spellcheck="false" required>
+    <button type="submit">Guardar clave</button>
+  </form>
+  <p id="status" role="status"></p>
+  <button id="change-key" class="secondary" type="button" hidden>Cambiar vinculación</button>
+  <script src="popup.js"></script>
+</body>
+</html>

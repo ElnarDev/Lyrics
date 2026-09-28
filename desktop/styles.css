@@ -1,5 +1,7 @@
 :root {
     --font-size: 27px;
+    --panel-opacity: .92;
+    --lyrics-opacity: 1;
 }
 
 * {
@@ -25,35 +27,28 @@ body {
     padding: 14px;
     border: 1px solid rgba(255, 255, 255, .22);
     border-radius: 20px;
-    background: #100d1b;
-    backdrop-filter: blur(16px);
+    background: rgba(16, 13, 27, var(--panel-opacity));
 }
 
 header {
     display: flex;
     justify-content: space-between;
     align-items: start;
-    cursor: move;
+    cursor: grab;
     user-select: none;
-    -webkit-app-region: drag;
 }
 
-header button { -webkit-app-region: no-drag; }
-
 #title,
-#artist,
-#source {
+#artist {
     display: block;
 }
 
-#artist,
-#source {
+#artist {
     margin-top: 3px;
     color: #cfc8e9;
     font-size: 12px;
 }
 
-#source { color: #aa9bcf; }
 
 button {
     color: #fff;
@@ -81,7 +76,7 @@ button {
 }
 
 .line {
-    color: rgba(255, 255, 255, .36);
+    color: rgba(255, 255, 255, calc(.36 * var(--lyrics-opacity)));
     font-size: var(--font-size);
     font-weight: 650;
     line-height: 1.16;
@@ -89,30 +84,59 @@ button {
 }
 
 .line.active {
-    color: #fff;
+    color: rgba(255, 255, 255, var(--lyrics-opacity));
     transform: scale(1.04);
-    text-shadow: 0 0 24px rgba(176, 127, 255, .7);
+    text-shadow: 0 0 24px rgba(176, 127, 255, calc(.7 * var(--lyrics-opacity)));
+}
+
+.status-message {
+    color: rgba(255, 255, 255, calc(.78 * var(--lyrics-opacity)));
+    font-size: clamp(15px, 4vw, 20px);
+    line-height: 1.3;
 }
 
 footer {
     display: flex;
-    gap: 8px;
+    gap: 12px;
     justify-content: center;
     align-items: center;
 }
 
-footer button {
-    width: 34px;
-    height: 30px;
+.slider-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #cfc8e9;
+    font-size: 11px;
+    white-space: nowrap;
 }
-
-input {
+.slider-control input {
     accent-color: #b87cff;
-    width: 120px;
+    width: 82px;
 }
 
-#sync { min-width: 34px; color: #cfc8e9; font-size: 11px; text-align: center; }
+.size-control { gap: 6px; }
+.size-control span { display: inline-flex; gap: 3px; }
+.size-control output { font-variant-numeric: tabular-nums; }
 
 .resize-grip { position: absolute; bottom: 0; width: 28px; height: 28px; -webkit-app-region: no-drag; z-index: 5; }
 .resize-grip.left { left: 0; cursor: nesw-resize; }
 .resize-grip.right { right: 0; cursor: nwse-resize; }
+
+body.compact-mode #overlay {
+    display: block;
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 20px;
+}
+body.compact-mode header,
+body.compact-mode footer,
+body.compact-mode .resize-grip { display: none; }
+body.compact-mode #lyrics {
+    justify-content: flex-start;
+    gap: 8px;
+    overflow: visible;
+    padding: 0;
+    cursor: grab;
+    user-select: none;
+}

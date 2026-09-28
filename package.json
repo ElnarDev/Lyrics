@@ -5,15 +5,16 @@
   "main": "desktop/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check extension/content.js"
+    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/window-bounds.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
+    "test": "node --test"
   },
   "devDependencies": {
-    "electron": "^35.1.5"
+    "electron": "^44.4.5"
   },
   "dependencies": {
     "ws": "^8.18.1"
   },
   "allowScripts": {
-    "electron@35.7.5": true
+    "electron@44.4.5": true
   }
 }

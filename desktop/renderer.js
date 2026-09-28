@@ -1,18 +1,32 @@
 let currentTime = 0;
-let fontSize = 27;
-let syncOffset = 0;
-let lines = window.demoLyrics || [];
+let lines = [];
+let lyricStatus = "waiting";
+let compactMode = false;
 const lyricsEl = document.querySelector("#lyrics");
-function activeIndex() {
-  return lines.reduce(
-    (index, line, i) => (line.time + syncOffset <= currentTime ? i : index),
-    0,
-  );
-}
+const statusText = {
+  waiting: "Esperando YouTube Music…",
+  loading: "Buscando letras sincronizadas…",
+  "not-found": "No se encontraron letras para esta canción.",
+  "not-synced": "Hay letra, pero no una versión sincronizada disponible.",
+  ambiguous: "Hay varias versiones posibles. No se mostrará una letra que pueda ser incorrecta.",
+  timeout: "La búsqueda tardó demasiado. Reintenta desde el icono de Lyrics.",
+  offline: "No se pudo conectar con LRCLIB. Reintenta desde el icono de Lyrics.",
+  "invalid-response": "LRCLIB devolvió una respuesta inválida. Reintenta desde el icono de Lyrics.",
+  error: "No se pudieron cargar las letras. Reintenta desde el icono de Lyrics.",
+};
+function activeIndex() { return lines.reduce((index, line, i) => (line.time <= currentTime ? i : index), 0); }
 function render() {
+  if (!lines.length) {
+    const message = document.createElement("div");
+    message.className = "status-message";
+    message.textContent = statusText[lyricStatus] || statusText.error;
+    lyricsEl.replaceChildren(message);
+    if (compactMode) requestAnimationFrame(() => window.lyrics.setCompactContentHeight(Math.ceil(lyricsEl.scrollHeight + 24)));
+    return;
+  }
   const active = activeIndex();
-  const first = Math.max(0, active - 2);
-  const last = Math.min(lines.length, active + 3);
+  const first = compactMode ? active : Math.max(0, active - 2);
+  const last = Math.min(lines.length, active + (compactMode ? 2 : 3));
   lyricsEl.replaceChildren(
     ...lines.slice(first, last).map((line, relativeIndex) => {
       const index = first + relativeIndex;
@@ -22,38 +36,69 @@ function render() {
       return el;
     }),
   );
+  if (compactMode) {
+    requestAnimationFrame(() => window.lyrics.setCompactContentHeight(Math.ceil(lyricsEl.scrollHeight + 24)));
+  }
 }
+window.lyrics.onCompactMode((enabled) => {
+  compactMode = enabled;
+  document.body.classList.toggle("compact-mode", enabled);
+  render();
+});
 window.lyrics.onPlayerUpdate(({ title, artist, currentTime: time }) => {
-  document.querySelector("#title").textContent = title || "Canción desconocida";
-  document.querySelector("#artist").textContent = artist || "YouTube Music";
+  document.querySelector("#title").textContent = title || "Lyrics";
+  document.querySelector("#artist").textContent = artist || "Esperando YouTube Music";
   currentTime = Number(time) || 0;
   render();
 });
-window.lyrics.onLyricsUpdate(({ lines: nextLines, source }) => {
-  if (nextLines.length) lines = nextLines;
-  document.querySelector("#source").textContent = nextLines.length
-    ? `Letras sincronizadas: ${source}`
-    : source;
+window.lyrics.onLyricsUpdate(({ lines: nextLines, status }) => {
+  lines = Array.isArray(nextLines) ? nextLines : [];
+  lyricStatus = status;
   render();
 });
-document.querySelector("#opacity").oninput = (e) =>
-  window.lyrics.setOpacity(e.target.value / 100);
-document.querySelector("#smaller").onclick = () => {
-  fontSize = Math.max(16, fontSize - 2);
-  document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
+const preferenceControls = {
+  windowOpacity: document.querySelector("#window-opacity"),
+  lyricsOpacity: document.querySelector("#lyrics-opacity"),
+  fontSize: document.querySelector("#font-size"),
 };
-document.querySelector("#larger").onclick = () => {
-  fontSize = Math.min(52, fontSize + 2);
-  document.documentElement.style.setProperty("--font-size", `${fontSize}px`);
-};
-function changeSync(by) {
-  syncOffset += by;
-  document.querySelector("#sync").textContent = `${syncOffset.toFixed(1)} s`;
-  render();
+function applyPreferences(preferences) {
+  preferenceControls.windowOpacity.value = preferences.windowOpacity;
+  preferenceControls.lyricsOpacity.value = preferences.lyricsOpacity;
+  preferenceControls.fontSize.value = preferences.fontSize;
+  document.documentElement.style.setProperty("--panel-opacity", preferences.windowOpacity / 100);
+  document.documentElement.style.setProperty("--lyrics-opacity", preferences.lyricsOpacity / 100);
+  document.documentElement.style.setProperty("--font-size", `${preferences.fontSize}px`);
+  document.querySelector("#font-size-value").value = `${preferences.fontSize} px`;
 }
-document.querySelector("#sync-back").onclick = () => changeSync(-0.5);
-document.querySelector("#sync-forward").onclick = () => changeSync(0.5);
-document.querySelector("#hide").onclick = () => window.close();
+function savePreferences() {
+  const values = Object.fromEntries(Object.entries(preferenceControls).map(([name, control]) => [name, control.value]));
+  const preferences = window.LyricsPreferences.normalize(values);
+  applyPreferences(preferences);
+  window.LyricsPreferences.save(localStorage, preferences);
+  if (compactMode) render();
+}
+applyPreferences(window.LyricsPreferences.load(localStorage));
+for (const control of Object.values(preferenceControls)) control.addEventListener("input", savePreferences);
+document.querySelector("#hide").onclick = () => window.lyrics.hideOverlay();
+function startDrag(event) {
+  if (event.target.closest("button")) return;
+  if (event.currentTarget === lyricsEl && !compactMode) return;
+  let lastX = event.screenX;
+  let lastY = event.screenY;
+  const move = (next) => {
+    window.lyrics.moveOverlay(next.screenX - lastX, next.screenY - lastY);
+    lastX = next.screenX;
+    lastY = next.screenY;
+  };
+  const end = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+}
+document.querySelector("#drag-region").addEventListener("pointerdown", startDrag);
+lyricsEl.addEventListener("pointerdown", startDrag);
 for (const grip of document.querySelectorAll(".resize-grip")) {
   grip.addEventListener("pointerdown", (event) => {
     const side = grip.classList.contains("left") ? "left" : "right";

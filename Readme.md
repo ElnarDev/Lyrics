@@ -4,17 +4,17 @@ Lyrics muestra letras sincronizadas en una ventana flotante de Windows mientras 
 
 ## Estado actual
 
-Este repositorio contiene el primer prototipo vertical. Incluye una aplicación de escritorio Electron con una ventana siempre visible y una extensión de Chrome que detecta la pista, el estado y el tiempo de reproducción de YouTube Music. La aplicación incorpora letras de demostración sincronizadas para validar la experiencia visual antes de conectar un proveedor real de letras.
+Este repositorio contiene un prototipo funcional. Incluye una aplicación de escritorio Electron con una ventana siempre visible y una extensión de Chrome que detecta la pista, el estado y el tiempo de reproducción de YouTube Music. La aplicación consulta LRCLIB para obtener letras sincronizadas y muestra un estado de espera cuando todavía no detecta una canción.
 
 No hay cuentas ni inicio de sesión en el MVP. La extensión y la aplicación se comunican únicamente en el equipo local mediante `localhost`.
 
 ## Experiencia objetivo
 
 - Reproducir una canción en YouTube Music.
-- La extensión envía título, artista, estado y posición actual a la aplicación.
+- La extensión envía título, artista, álbum y duración cuando están disponibles, además del estado y la posición actual, a la aplicación.
 - La ventana de Lyrics permanece por encima de las demás, puede arrastrarse y permite ajustar opacidad y tamaño de letra.
 - La línea actual se resalta y el resto de la letra se desplaza verticalmente de forma suave.
-- Si no hay letra sincronizada, se mostrará un estado claro; en una fase posterior se podrá corregir manualmente el desfase.
+- Si LRCLIB solo dispone de una letra sin tiempos, Lyrics no la muestra como sustituto manual: indica que no hay una versión sincronizada disponible. Si no hay letra, muestra un estado distinto.
 
 ## Arquitectura
 
@@ -34,11 +34,11 @@ La extensión no intenta crear una ventana del sistema: Chrome no puede ofrecer 
 
 - `desktop/`: aplicación Electron, servidor WebSocket local y UI de letras.
 - `extension/`: extensión Manifest V3 para `music.youtube.com`.
-- `shared/demo-lyrics.js`: letra sincronizada de demostración, sin contenido de canciones con copyright.
+- `shared/demo-lyrics.js`: letra ficticia de demostración conservada para desarrollo; no se carga en la aplicación.
 
 ## Ejecutar el prototipo
 
-Requisitos: Node.js 20 o superior y Google Chrome.
+Requisitos: Node.js 22.12 o superior y Google Chrome.
 
 ```powershell
 npm install
@@ -50,25 +50,34 @@ Luego, en Chrome:
 1. Abre `chrome://extensions`.
 2. Activa **Modo de desarrollador**.
 3. Elige **Cargar descomprimida** y selecciona la carpeta `extension`.
-4. Abre [YouTube Music](https://music.youtube.com) y reproduce una canción.
+4. En la bandeja de Windows, abre el menú del icono de Lyrics y elige **Copiar clave de vinculación**.
+5. Haz clic en el icono de la extensión Lyrics en Chrome, pega la clave y pulsa **Guardar clave**. La clave se guarda localmente en el perfil de Chrome; no se envía por Internet.
+6. Abre o recarga [YouTube Music](https://music.youtube.com) y reproduce una canción.
 
-La aplicación se abrirá con letras de demostración y actualizará el encabezado con la pista detectada. Puedes arrastrar la barra superior, usar `−` y `+` para cambiar el tamaño, el control deslizante para la opacidad y `×` para ocultar la ventana. Vuelve a mostrarla desde el icono de Lyrics en la bandeja del sistema.
+Si ya tenías la extensión cargada antes de añadir la vinculación, pulsa **Actualizar** en `chrome://extensions` una vez. Si cambia el perfil de Chrome o se borran sus datos locales, repite los pasos 4 y 5.
+
+La aplicación actualizará el encabezado y las letras con la pista detectada. Arrastra la cabecera para moverla, usa los controles inferiores para ajustar la opacidad de la ventana, la opacidad de las letras y su tamaño, o pulsa `×` para ocultarla sin cerrar el proceso. Estos tres ajustes se guardan localmente y se restauran al volver a abrir Lyrics. Un clic izquierdo en el icono de Lyrics de la bandeja alterna entre ocultar y mostrar la misma ventana, sin perder su modo normal o compacto. **Mostrar Lyrics** en el menú siempre la abre; **Salir** cierra la aplicación por completo.
+
+Pulsa **Ctrl+Alt+C** desde cualquier aplicación para activar o desactivar el modo compacto. Este modo oculta la cabecera y los controles, muestra la línea actual y la siguiente sobre un fondo oscuro redondeado, y conserva los tres ajustes del modo normal: opacidad de la ventana, opacidad de las letras y tamaño de fuente. Puedes arrastrarlo desde el texto de las letras. Al salir se recupera el tamaño normal sin perder la nueva posición; si quedaría fuera de la pantalla, se ajusta al borde visible. El mismo cambio de modo está disponible en el menú del icono de la bandeja si otra aplicación ocupa el atajo.
 
 ## Decisiones del MVP
 
-- **Sin autenticación:** reduce fricción y evita almacenar datos personales antes de que sea necesario.
+- **Vinculación local:** un token aleatorio por instalación autentica los mensajes de la extensión. La app lo conserva en su directorio de datos y Chrome lo guarda en el almacenamiento local de la extensión. Nunca se incluye en consultas a LRCLIB.
 - **Sincronía local:** la extensión obtiene la posición directamente del reproductor; la app no necesita credenciales de Google.
-- **Proveedor de letras desacoplado:** `demo-lyrics.js` representa el contrato que más adelante podrá cubrir un proveedor autorizado o letras aportadas por el usuario.
+- **Proveedor de letras:** se consulta LRCLIB primero con el título recibido y después sin el sufijo de artista invitado cuando corresponda. Para subtítulos no descriptivos de versión (por ejemplo, un nombre de película), se intenta también el título corto, pero solo con álbum y duración compatibles. No se recortan marcas como «Live», «Remix» o «Acoustic». Si varias letras sincronizadas siguen siendo indistinguibles, no se elige una al azar; las letras sin tiempos no se muestran. Antes de distribuir Lyrics habrá que revisar los términos y derechos de las letras.
 - **Ajuste manual pendiente:** se añadirá un desplazamiento por canción y persistencia de preferencias locales.
 
 ## Próximas fases
 
-1. Integrar un proveedor de letras con licencia y condiciones de uso compatibles.
-2. Resolver la canción usando título, artista, álbum y duración, y manejar resultados ambiguos.
-3. Añadir ajuste manual de sincronía, caché local y preferencias persistentes.
-4. Implementar controles de reproducción y accesibilidad con teclado.
-5. Empaquetar e instalar la aplicación y publicar la extensión.
+El plan de preparación para publicación, con prioridades y criterios para marcar cada trabajo como listo, está en [TODO.md](TODO.md).
+
+El recorrido actual de datos está en [docs/DATA_FLOW.md](docs/DATA_FLOW.md). La revisión de derechos de letras sigue abierta en [docs/LYRICS_RIGHTS.md](docs/LYRICS_RIGHTS.md), y existe un [borrador de privacidad](docs/PRIVACY_DRAFT.md) para completar antes de distribuir la aplicación.
+
+1. Verificar las condiciones de uso de las letras para distribución.
+2. Verificar con varias canciones reales la selección por álbum y duración; recargar la extensión de Chrome para enviar los nuevos metadatos.
+3. Persistir preferencias como tamaño, opacidad y modo de visualización.
+4. Empaquetar e instalar la aplicación y publicar la extensión.
 
 ## Nota legal
 
-Las letras están protegidas por derechos de autor. Antes de distribuir Lyrics se debe usar una fuente autorizada, respetar sus términos y evitar almacenar o redistribuir letras sin permiso. El prototipo solo incluye texto ficticio de demostración.
+Las letras están protegidas por derechos de autor. Antes de distribuir Lyrics se debe verificar la autorización y condiciones de LRCLIB y evitar almacenar o redistribuir letras sin permiso. Las letras de demostración incluidas en el repositorio son ficticias.
