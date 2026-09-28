@@ -8,6 +8,7 @@ let savedToken = "";
 let socket;
 let retryTimer;
 let editing = false;
+const protocolVersion = 1;
 
 function showState(state) {
   const needsKey = state === "unpaired" || state === "editing";
@@ -22,6 +23,8 @@ function showState(state) {
     connected: "Lyrics está abierto y aceptó la clave. Reproduce música en YouTube Music para ver las letras.",
     disconnected: "Clave guardada; esperando a que Lyrics esté abierta.",
     invalid: "No se pudo verificar la clave. Usa «Cambiar vinculación» si la clave cambió.",
+    "update-app": "Esta versión de Lyrics para Windows no es compatible. Actualiza la aplicación.",
+    "update-extension": "La aplicación requiere una versión más reciente de la extensión. Actualízala en Chrome.",
   }[state];
 }
 
@@ -46,12 +49,25 @@ function probeConnection() {
   connection.onmessage = (event) => {
     if (socket !== connection) return;
     try {
-      if (JSON.parse(event.data)?.type === "ready") showState("connected");
+      const message = JSON.parse(event.data);
+      if (message?.type === "ready") {
+        if (message.protocolVersion !== protocolVersion) {
+          showState(message.protocolVersion > protocolVersion ? "update-extension" : "update-app");
+          socket = undefined;
+          connection.close();
+          return;
+        }
+        connection.send(JSON.stringify({ type: "hello", protocolVersion }));
+      } else if (message?.type === "compatible") showState("connected");
     } catch { /* Ignore unexpected bridge messages. */ }
   };
   connection.onclose = (event) => {
     if (socket !== connection) return;
     socket = undefined;
+    if (event.code === 4002) {
+      showState("update-extension");
+      return;
+    }
     if (event.code === 1008) {
       showState("invalid");
       return;

@@ -15,8 +15,13 @@ function runPopup(initialToken = "") {
     send(message) { this.sent.push(JSON.parse(message)); }
     close() { this.onclose?.({ code: 1000 }); }
     open() { this.onopen(); }
-    ready() { this.onmessage({ data: JSON.stringify({ type: "ready" }) }); }
+    ready() {
+      this.onmessage({ data: JSON.stringify({ type: "ready", protocolVersion: 1 }) });
+      this.onmessage({ data: JSON.stringify({ type: "compatible" }) });
+    }
+    oldApp() { this.onmessage({ data: JSON.stringify({ type: "ready" }) }); }
     reject() { this.onclose({ code: 1008 }); }
+    incompatible() { this.onclose({ code: 4002 }); }
   }
   const context = {
     document: { getElementById: (id) => elements[id] },
@@ -49,9 +54,26 @@ test("saved key hides pairing instructions and shows confirmed connection only a
   assert.equal(connections[0].sent[0].token, token);
   connections[0].ready();
   assert.equal(elements.heading.textContent, "Lyrics conectado");
+  assert.deepEqual(connections[0].sent[1], { type: "hello", protocolVersion: 1 });
   connections[0].reject();
   assert.equal(elements.heading.textContent, "Lyrics vinculado");
   assert.match(elements.status.textContent, /No se pudo verificar/);
+});
+
+test("an old desktop app shows an update message instead of connected", () => {
+  const { elements, connections } = runPopup("a".repeat(64));
+  connections[0].open();
+  connections[0].oldApp();
+  assert.match(elements.status.textContent, /Actualiza la aplicación/);
+  assert.notEqual(elements.heading.textContent, "Lyrics conectado");
+});
+
+test("an incompatible extension shows its own update message", () => {
+  const { elements, connections } = runPopup("a".repeat(64));
+  connections[0].open();
+  connections[0].ready();
+  connections[0].incompatible();
+  assert.match(elements.status.textContent, /Actualízala en Chrome/);
 });
 
 test("unpaired user can save a key and switch to connection status", () => {

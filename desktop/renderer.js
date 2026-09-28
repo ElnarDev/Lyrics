@@ -14,6 +14,7 @@ const statusText = {
   offline: "No se pudo conectar con LRCLIB. Reintenta desde el icono de Lyrics.",
   "invalid-response": "LRCLIB devolvió una respuesta inválida. Reintenta desde el icono de Lyrics.",
   error: "No se pudieron cargar las letras. Reintenta desde el icono de Lyrics.",
+  "update-extension": "La extensión de Lyrics no es compatible. Actualízala en Chrome.",
 };
 function activeIndex() { return lines.reduce((index, line, i) => (line.time <= currentTime ? i : index), 0); }
 function updateCompactHeight() {

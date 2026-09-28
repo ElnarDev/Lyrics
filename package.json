@@ -5,7 +5,7 @@
   "main": "desktop/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/lyrics-session.js && node --check desktop/window-bounds.js && node --check desktop/window-state.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
+    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/player-bridge.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/lyrics-session.js && node --check desktop/window-bounds.js && node --check desktop/window-state.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
     "test": "node --test"
   },
   "devDependencies": {

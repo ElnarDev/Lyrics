@@ -1,17 +1,14 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, globalShortcut, screen, clipboard } = require("electron");
 const path = require("path");
 const { pathToFileURL } = require("url");
-const { WebSocketServer } = require("ws");
-const { MAX_PLAYER_MESSAGE_BYTES, isAllowedPlayerOrigin, parsePlayerMessage } = require("./player-message");
-const { PlayerSources } = require("./player-sources");
 const { lyricsErrorStatus } = require("./lyrics-errors");
 const { findLyrics: requestLyrics } = require("./lyrics-provider");
 const { LyricsCache } = require("./lyrics-cache");
-const { createLyricsSession } = require("./lyrics-session");
+const { startPlayerBridge } = require("./player-bridge");
 const { restoreNormalBounds } = require("./window-bounds");
 const { restoreWindowState, loadWindowState, saveWindowState } = require("./window-state");
 const { isUsableWindow, sendToWindow, showOrCreateWindow, toggleOrCreateWindow } = require("./window-lifecycle");
-const { AUTH_TIMEOUT_MS, loadOrCreateBridgeToken, isValidBridgeAuth } = require("./bridge-auth");
+const { loadOrCreateBridgeToken } = require("./bridge-auth");
 let mainWindow;
 let tray;
 let isQuitting = false;
@@ -194,67 +191,18 @@ function createTray() {
   });
 }
 function startBridge() {
-  const sources = new PlayerSources();
-  const session = createLyricsSession({
+  const bridge = startPlayerBridge({
+    token: bridgeToken,
     lookup: findLyrics,
     trackKey,
     send: (channel, payload) => sendToWindow(mainWindow, channel, payload),
     invalidate: (key) => lyricCache.delete(key),
     errorStatus: lyricsErrorStatus,
     warn: (error) => console.warn("Lyrics lookup failed:", error.message),
+    onError: (error) => console.error("Local bridge unavailable:", error.message),
   });
-  const { showSelectedPlayer } = session;
-  retryCurrentLyrics = () => {
-    const selected = sources.select();
-    if (selected) showSelectedPlayer(selected, selected.source, true);
-  };
-  replayCurrentPlayer = () => {
-    session.reset();
-    const selected = sources.select();
-    if (selected) showSelectedPlayer(selected, selected.source);
-  };
-  const server = new WebSocketServer({
-    host: "127.0.0.1",
-    port: 37421,
-    maxPayload: MAX_PLAYER_MESSAGE_BYTES,
-    perMessageDeflate: false,
-  });
-  server.on("connection", (socket, request) => {
-    socket.on("error", (error) => console.warn("Local player connection failed:", error.message));
-    if (!isAllowedPlayerOrigin(request.headers.origin)) {
-      socket.close(1008, "Unrecognized player origin");
-      return;
-    }
-    let authenticated = false;
-    const authTimeout = setTimeout(() => socket.close(1008, "Authentication timeout"), AUTH_TIMEOUT_MS);
-    socket.on("message", (raw, isBinary) => {
-      if (!authenticated) {
-        if (!isValidBridgeAuth(raw, isBinary, bridgeToken)) {
-          socket.close(1008, "Authentication failed");
-          return;
-        }
-        authenticated = true;
-        clearTimeout(authTimeout);
-        socket.send(JSON.stringify({ type: "ready" }));
-        return;
-      }
-      const player = parsePlayerMessage(raw, isBinary);
-      if (!player) {
-        socket.close(1008, "Invalid player message");
-        return;
-      }
-      showSelectedPlayer(sources.update(socket, player), socket);
-    });
-    socket.on("close", () => {
-      clearTimeout(authTimeout);
-      if (authenticated) showSelectedPlayer(sources.remove(socket));
-    });
-  });
-  const staleCheck = setInterval(() => showSelectedPlayer(sources.select()), 2000);
-  server.on("close", () => clearInterval(staleCheck));
-  server.on("error", (error) =>
-    console.error("Local bridge unavailable:", error.message),
-  );
+  retryCurrentLyrics = bridge.retry;
+  replayCurrentPlayer = bridge.replay;
 }
 function startApp() {
   try {

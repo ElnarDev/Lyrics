@@ -1,6 +1,6 @@
 # Flujo de datos de Lyrics
 
-Verificado contra `extension/content.js`, `extension/manifest.json`, `desktop/main.js` y `desktop/renderer.js` el 27 de septiembre de 2026. Este documento describe la implementación actual, no funciones futuras.
+Verificado contra `extension/content.js`, `extension/manifest.json`, `desktop/player-bridge.js`, `desktop/main.js` y `desktop/renderer.js` el 28 de septiembre de 2026. Este documento describe la implementación actual, no funciones futuras. El formato exacto de los mensajes se detalla en [`BRIDGE_PROTOCOL.md`](BRIDGE_PROTOCOL.md).
 
 | Etapa | Datos | Destino y finalidad | Persistencia actual |
 | --- | --- | --- | --- |

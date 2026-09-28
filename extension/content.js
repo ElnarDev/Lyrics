@@ -3,14 +3,22 @@
   let lastPayload = "";
   let bridgeToken = "";
   let authenticated = false;
+  let incompatible = false;
+  const protocolVersion = 1;
   let observedBar;
   let observedMedia;
+  let observedTitle;
+  let observedByline;
   let metadataTimer;
+  let title = "";
+  let byline = "";
+  let album = "";
   const mediaEvents = ["play", "pause", "seeking", "seeked", "loadedmetadata", "durationchange", "emptied", "ended"];
-  const barObserver = new MutationObserver(() => {
+  const metadataObserver = new MutationObserver(() => {
     clearTimeout(metadataTimer);
-    metadataTimer = setTimeout(update, 50);
+    metadataTimer = setTimeout(refreshMetadata, 50);
   });
+  const barObserver = new MutationObserver(ensureMetadataTargets);
   function connect() {
     if (!bridgeToken) return;
     const connection = new WebSocket("ws://127.0.0.1:37421");
@@ -23,33 +31,53 @@
       if (socket !== connection) return;
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
-      if (message?.type !== "ready") return;
-      authenticated = true;
-      lastPayload = "";
-      update();
+      if (message?.type === "ready") {
+        if (message.protocolVersion !== protocolVersion) {
+          incompatible = true;
+          connection.close();
+          return;
+        }
+        incompatible = false;
+        connection.send(JSON.stringify({ type: "hello", protocolVersion }));
+      } else if (message?.type === "compatible") {
+        authenticated = true;
+        lastPayload = "";
+        update();
+      }
     };
     connection.onclose = () => {
       if (socket === connection) {
         authenticated = false;
-        setTimeout(connect, 3000);
+        setTimeout(connect, incompatible ? 30000 : 3000);
       }
     };
   }
-  function text(selector) {
-    return document.querySelector(selector)?.textContent?.trim() || "";
+  function refreshMetadata() {
+    title = observedTitle?.textContent?.trim() || "";
+    byline = observedByline?.textContent?.trim() || "";
+    album = byline.split(/[•·]/)[1]?.trim() || "";
+    update();
   }
-  function player() {
-    return document.querySelector("video");
+  function ensureMetadataTargets() {
+    const titleNode = document.querySelector("ytmusic-player-bar .title");
+    const bylineNode = document.querySelector("ytmusic-player-bar .byline");
+    if (titleNode === observedTitle && bylineNode === observedByline) return;
+    metadataObserver.disconnect();
+    observedTitle = titleNode;
+    observedByline = bylineNode;
+    if (titleNode) metadataObserver.observe(titleNode, { childList: true, subtree: true, characterData: true });
+    if (bylineNode) metadataObserver.observe(bylineNode, { childList: true, subtree: true, characterData: true });
+    refreshMetadata();
   }
   function ensureTargets() {
     const bar = document.querySelector("ytmusic-player-bar");
     if (bar !== observedBar) {
       barObserver.disconnect();
       observedBar = bar;
-      if (bar) barObserver.observe(bar, { childList: true, subtree: true, characterData: true });
-      update();
+      if (bar) barObserver.observe(bar, { childList: true, subtree: true });
     }
-    const media = player();
+    ensureMetadataTargets();
+    const media = document.querySelector("video");
     if (media !== observedMedia) {
       for (const event of mediaEvents) observedMedia?.removeEventListener?.(event, update);
       observedMedia = media;
@@ -58,13 +86,11 @@
     }
   }
   function update() {
-    const media = player();
-    const byline = text("ytmusic-player-bar .byline");
-    const details = byline.split(/[•·]/).map((part) => part.trim());
+    const media = observedMedia;
     const payload = {
-      title: text("ytmusic-player-bar .title"),
+      title,
       artist: byline,
-      album: details[1] || "",
+      album,
       duration: Number.isFinite(media?.duration) && media.duration > 0 ? Math.round(media.duration) : 0,
       currentTime: media?.currentTime || 0,
       paused: media?.paused ?? true,
@@ -83,6 +109,7 @@
     if (area !== "local" || !changes.bridgeToken) return;
     bridgeToken = changes.bridgeToken.newValue || "";
     authenticated = false;
+    incompatible = false;
     socket?.close();
     connect();
   });
