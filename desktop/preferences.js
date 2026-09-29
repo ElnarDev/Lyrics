@@ -1,5 +1,6 @@
 (function (root) {
   const STORAGE_KEY = "lyrics.displayPreferences.v1";
+  const OFFSETS_KEY = "lyrics.syncOffsets.v1";
   const fields = {
     windowOpacity: { defaultValue: 92, min: 0, max: 100 },
     lyricsOpacity: { defaultValue: 100, min: 15, max: 100 },
@@ -37,7 +38,28 @@
     }
   }
 
-  const api = { STORAGE_KEY, normalize, load, save };
+  function loadOffset(storage, trackKey) {
+    if (!trackKey) return 0;
+    try {
+      const value = JSON.parse(storage.getItem(OFFSETS_KEY) || "{}")[trackKey];
+      return Number.isFinite(value) && Math.abs(value) <= 10 ? value : 0;
+    } catch { return 0; }
+  }
+
+  function saveOffset(storage, trackKey, offset) {
+    if (!trackKey || !Number.isFinite(offset) || Math.abs(offset) > 10) return false;
+    try {
+      const stored = JSON.parse(storage.getItem(OFFSETS_KEY) || "{}");
+      const entries = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+      delete entries[trackKey];
+      if (offset !== 0) entries[trackKey] = offset;
+      while (Object.keys(entries).length > 100) delete entries[Object.keys(entries)[0]];
+      storage.setItem(OFFSETS_KEY, JSON.stringify(entries));
+      return true;
+    } catch { return false; }
+  }
+
+  const api = { STORAGE_KEY, OFFSETS_KEY, normalize, load, save, loadOffset, saveOffset };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.LyricsPreferences = api;
 })(globalThis);

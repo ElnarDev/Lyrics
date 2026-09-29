@@ -5,20 +5,25 @@ const { lyricsErrorStatus } = require("./lyrics-errors");
 const { findLyrics: requestLyrics } = require("./lyrics-provider");
 const { LyricsCache } = require("./lyrics-cache");
 const { startPlayerBridge } = require("./player-bridge");
-const { restoreNormalBounds } = require("./window-bounds");
+const { fitWindowBounds, restoreNormalBounds, resizeWindowBounds, keepWindowReachable } = require("./window-bounds");
 const { restoreWindowState, loadWindowState, saveWindowState } = require("./window-state");
 const { isUsableWindow, sendToWindow, showOrCreateWindow, toggleOrCreateWindow } = require("./window-lifecycle");
 const { loadOrCreateBridgeToken } = require("./bridge-auth");
+const { createDiagnostics } = require("./diagnostics");
 let mainWindow;
 let tray;
 let isQuitting = false;
 const lyricCache = new LyricsCache();
+const diagnostics = createDiagnostics();
 let compactMode = false;
 let normalBounds;
 let retryCurrentLyrics = () => {};
 let replayCurrentPlayer = () => {};
 let bridgeToken;
 let windowStateTimer;
+let compactShortcutAvailable = false;
+let retryShortcutAvailable = false;
+let resetAppearanceOnLoad = false;
 const overlayUrl = pathToFileURL(path.join(__dirname, "index.html")).href;
 
 function isTrustedOverlayEvent(event) {
@@ -75,7 +80,8 @@ function createWindow() {
     backgroundMaterial: "none",
     icon: path.join(__dirname, "..", "assets", "tray-icon.png"),
     alwaysOnTop: true,
-    focusable: false,
+    focusable: true,
+    skipTaskbar: true,
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -104,7 +110,7 @@ function createWindow() {
     const bounds = window.getBounds();
     const normal = compactMode ? normalBounds : bounds;
     if (!saveWindowState(app.getPath("userData"), { compactMode, bounds, normalBounds: normal })) {
-      console.warn("Could not save Lyrics window position");
+      diagnostics.record("window-state-save-failed");
     }
   };
   const scheduleWindowStateSave = () => {
@@ -122,13 +128,14 @@ function createWindow() {
   window.webContents.on("did-finish-load", () => {
     hideSystemTitle();
     if (compactMode) sendToWindow(window, "compact-mode", true);
+    if (resetAppearanceOnLoad) {
+      resetAppearanceOnLoad = false;
+      sendToWindow(window, "reset-appearance");
+    }
     replayCurrentPlayer();
   });
   window.on("focus", hideSystemTitle);
   hideSystemTitle();
-  window.webContents.on("console-message", (_event, _level, message) =>
-    console.log("Overlay:", message),
-  );
   window.on("close", (event) => {
     clearTimeout(windowStateTimer);
     persistWindowState();
@@ -146,16 +153,25 @@ function showLyrics() {
   if (isQuitting) return;
   showOrCreateWindow(mainWindow, createWindow);
 }
+function resetAppearance() {
+  if (isUsableWindow(mainWindow) && !mainWindow.webContents.isLoading()) {
+    sendToWindow(mainWindow, "reset-appearance");
+  } else {
+    resetAppearanceOnLoad = true;
+  }
+  showLyrics();
+}
 function setCompactMode(enabled) {
   if (!isUsableWindow(mainWindow) || compactMode === enabled) return;
   compactMode = enabled;
   if (enabled) {
     normalBounds = mainWindow.getBounds();
     mainWindow.setMinimumSize(360, 80);
-    mainWindow.setBounds({ ...normalBounds, height: 130 });
+    const display = screen.getDisplayMatching(normalBounds);
+    mainWindow.setBounds(fitWindowBounds({ ...normalBounds, height: 130 }, display.workArea));
   } else if (normalBounds) {
     const compactBounds = mainWindow.getBounds();
-    const display = screen.getDisplayNearestPoint({ x: compactBounds.x, y: compactBounds.y });
+    const display = screen.getDisplayMatching(compactBounds);
     mainWindow.setBounds(restoreNormalBounds(normalBounds, compactBounds, display.workArea));
     mainWindow.setMinimumSize(360, 260);
     normalBounds = mainWindow.getBounds();
@@ -175,8 +191,11 @@ function createTray() {
     Menu.buildFromTemplate([
       { label: "Mostrar Lyrics", click: showLyrics },
       { label: "Copiar clave de vinculación", click: () => clipboard.writeText(bridgeToken) },
-      { label: "Modo compacto (Ctrl+Alt+C)", click: () => setCompactMode(!compactMode) },
-      { label: "Reintentar letras", click: () => retryCurrentLyrics() },
+      { label: compactShortcutAvailable ? "Modo compacto (Ctrl+Alt+C)" : "Modo compacto", click: () => setCompactMode(!compactMode) },
+      { label: retryShortcutAvailable ? "Reintentar letras (Ctrl+Alt+X)" : "Reintentar letras", click: () => retryCurrentLyrics() },
+      { label: "Restablecer apariencia", click: resetAppearance },
+      { label: `Versión ${app.getVersion()}`, enabled: false },
+      { label: "Copiar diagnóstico", click: () => clipboard.writeText(diagnostics.report(app.getVersion())) },
       {
         label: "Salir",
         click: () => {
@@ -198,8 +217,9 @@ function startBridge() {
     send: (channel, payload) => sendToWindow(mainWindow, channel, payload),
     invalidate: (key) => lyricCache.delete(key),
     errorStatus: lyricsErrorStatus,
-    warn: (error) => console.warn("Lyrics lookup failed:", error.message),
-    onError: (error) => console.error("Local bridge unavailable:", error.message),
+    warn: (error) => diagnostics.record(`lyrics-${lyricsErrorStatus(error)}`),
+    onSocketError: () => diagnostics.record("bridge-socket-error"),
+    onError: () => diagnostics.record("bridge-unavailable"),
   });
   retryCurrentLyrics = bridge.retry;
   replayCurrentPlayer = bridge.replay;
@@ -207,12 +227,16 @@ function startBridge() {
 function startApp() {
   try {
     bridgeToken = loadOrCreateBridgeToken(app.getPath("userData"));
-  } catch (error) {
-    console.error("Cannot initialize local bridge authentication:", error.message);
+  } catch {
+    diagnostics.record("bridge-auth-init-failed");
     app.quit();
     return;
   }
   createWindow();
+  compactShortcutAvailable = globalShortcut.register("CommandOrControl+Alt+C", () => setCompactMode(!compactMode));
+  if (!compactShortcutAvailable) diagnostics.record("compact-shortcut-unavailable");
+  retryShortcutAvailable = globalShortcut.register("CommandOrControl+Alt+X", () => retryCurrentLyrics());
+  if (!retryShortcutAvailable) diagnostics.record("retry-shortcut-unavailable");
   createTray();
   startBridge();
   const recoverWindowAfterDisplayChange = () => {
@@ -233,9 +257,6 @@ function startApp() {
   };
   screen.on("display-removed", recoverWindowAfterDisplayChange);
   screen.on("display-metrics-changed", recoverWindowAfterDisplayChange);
-  if (!globalShortcut.register("CommandOrControl+Alt+C", () => setCompactMode(!compactMode))) {
-    console.warn("Compact mode shortcut unavailable");
-  }
   ipcMain.on("compact-content-height", (event, requestedHeight) => {
     if (!isTrustedOverlayEvent(event) || !compactMode || !isSmallFiniteNumber(requestedHeight)) return;
     const bounds = mainWindow.getBounds();
@@ -248,20 +269,27 @@ function startApp() {
       !isSmallFiniteNumber(dimensions.dx) || !isSmallFiniteNumber(dimensions.dy)) return;
     const { side, dx, dy } = dimensions;
     const bounds = mainWindow.getBounds();
-    const width = Math.max(360, bounds.width + (side === "left" ? -dx : dx));
-    const height = Math.max(compactMode ? 80 : 260, bounds.height + dy);
-    const x = side === "left" ? bounds.x + bounds.width - width : bounds.x;
-    mainWindow.setBounds({ x, y: bounds.y, width, height });
+    const display = screen.getDisplayMatching(bounds);
+    mainWindow.setBounds(resizeWindowBounds(
+      bounds, side, dx, dy, display.workArea, compactMode ? 80 : 260,
+    ));
   });
   ipcMain.on("move-overlay", (event, movement) => {
     if (!isTrustedOverlayEvent(event) || !movement ||
       !isSmallFiniteNumber(movement.dx) || !isSmallFiniteNumber(movement.dy)) return;
     const { dx, dy } = movement;
     const bounds = mainWindow.getBounds();
-    mainWindow.setPosition(bounds.x + dx, bounds.y + dy);
+    const reachable = keepWindowReachable(
+      { ...bounds, x: bounds.x + dx, y: bounds.y + dy },
+      screen.getAllDisplays().map((display) => display.workArea),
+    );
+    mainWindow.setPosition(reachable.x, reachable.y);
   });
   ipcMain.on("hide-overlay", (event) => {
     if (isTrustedOverlayEvent(event)) mainWindow.hide();
+  });
+  ipcMain.on("exit-compact-mode", (event) => {
+    if (isTrustedOverlayEvent(event) && compactMode) setCompactMode(false);
   });
 }
 

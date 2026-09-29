@@ -6,4 +6,6 @@ Cada ejecución instala exactamente las dependencias del archivo de bloqueo (`np
 
 `--ignore-scripts` evita descargar y ejecutar el binario de Electron durante estas pruebas puramente de código. Por ello, un resultado verde no demuestra que el instalador o la interfaz gráfica funcionen: esas verificaciones aún requieren un flujo de empaquetado y pruebas de aplicación en Windows.
 
-Antes de marcar el punto completo en `TODO.md`, comprobar una ejecución real en GitHub y añadir el artefacto instalable reproducible con su verificación de integridad. No publicar artefactos mientras sigan pendientes los derechos de las letras y la política de privacidad.
+El trabajo `installer` usa Node 24 y `npm ci` para construir un NSIS local. Comprueba que exista el ejecutable y muestra su SHA-256. No lo sube como artefacto ni lo publica mientras sigan abiertos los P0. El procedimiento y las pruebas manuales están en `docs/INSTALLER.md`.
+
+Antes de marcar el punto completo en `TODO.md`, comprobar una ejecución real en GitHub y probar instalación, actualización y desinstalación en una máquina sin Node.js. No publicar artefactos mientras sigan pendientes los derechos de las letras y la política de privacidad.

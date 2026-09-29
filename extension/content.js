@@ -114,6 +114,8 @@
     connect();
   });
   ensureTargets();
-  setInterval(update, 750);
+  setInterval(() => {
+    if (observedMedia && !observedMedia.paused) update();
+  }, 750);
   setInterval(ensureTargets, 2000);
 })();

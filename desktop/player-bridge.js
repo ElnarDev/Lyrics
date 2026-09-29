@@ -5,7 +5,7 @@ const { AUTH_TIMEOUT_MS, isValidBridgeAuth } = require("./bridge-auth");
 const { createLyricsSession } = require("./lyrics-session");
 const PROTOCOL_VERSION = 1;
 
-function startPlayerBridge({ token, lookup, trackKey, send, invalidate, errorStatus, port = 37421, warn = console.warn, onError = console.error }) {
+function startPlayerBridge({ token, lookup, trackKey, send, invalidate, errorStatus, port = 37421, warn = console.warn, onSocketError = warn, onError = console.error }) {
   const sources = new PlayerSources();
   const session = createLyricsSession({ lookup, trackKey, send, invalidate, errorStatus, warn });
   const { showSelectedPlayer } = session;
@@ -16,7 +16,7 @@ function startPlayerBridge({ token, lookup, trackKey, send, invalidate, errorSta
     perMessageDeflate: false,
   });
   server.on("connection", (socket, request) => {
-    socket.on("error", (error) => warn(error));
+    socket.on("error", (error) => onSocketError(error));
     if (!isAllowedPlayerOrigin(request.headers.origin)) {
       socket.close(1008, "Unrecognized player origin");
       return;

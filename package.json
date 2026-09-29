@@ -2,19 +2,46 @@
   "name": "lyrics-overlay",
   "version": "0.1.0",
   "description": "Ventana flotante de letras sincronizadas para YouTube Music",
+  "productName": "Lyrics",
   "main": "desktop/main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/player-bridge.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/lyrics-session.js && node --check desktop/window-bounds.js && node --check desktop/window-state.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
+    "pack:win": "electron-builder --win --x64 --dir",
+    "installer:win": "electron-builder --win nsis --x64",
+    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/diagnostics.js && node --check desktop/player-bridge.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/lyrics-session.js && node --check desktop/window-bounds.js && node --check desktop/window-state.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
     "test": "node --test"
   },
   "devDependencies": {
-    "electron": "^44.4.5"
+    "electron": "^44.4.5",
+    "electron-builder": "26.15.3"
   },
   "dependencies": {
     "ws": "^8.18.1"
   },
   "allowScripts": {
     "electron@44.4.5": true
+  },
+  "build": {
+    "appId": "app.lyrics.overlay",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": [
+      "desktop/**/*",
+      "assets/tray-icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/tray-icon.png",
+      "artifactName": "Lyrics-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true
+    },
+    "publish": null
   }
 }

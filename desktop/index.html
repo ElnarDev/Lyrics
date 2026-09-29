@@ -16,11 +16,19 @@
         </div>
         <button id="hide" aria-label="Ocultar">×</button>
       </header>
-      <section id="lyrics" aria-live="polite">Esperando YouTube Music…</section>
+      <section id="lyrics" aria-label="Letras">Esperando YouTube Music…</section>
+      <div id="lyrics-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="sync-toast" class="sync-toast" hidden></div>
+      <div id="compact-sync-offset" class="compact-sync-offset">0 s</div>
       <footer>
         <label class="slider-control">Ventana<input id="window-opacity" type="range" min="0" max="100" value="92" aria-label="Opacidad de la ventana" /></label>
         <label class="slider-control">Letras<input id="lyrics-opacity" type="range" min="15" max="100" value="100" aria-label="Opacidad de las letras" /></label>
         <label class="slider-control size-control"><span>Tamaño <output id="font-size-value">27 px</output></span><input id="font-size" type="range" min="16" max="48" value="27" aria-label="Tamaño de la letra" /></label>
+        <div id="sync-control" class="sync-control" hidden>
+          <button id="sync-later" type="button" aria-label="Atrasar letras medio segundo">−</button>
+          <button id="sync-reset" type="button" aria-label="Restablecer sincronización">0 s</button>
+          <button id="sync-earlier" type="button" aria-label="Adelantar letras medio segundo">+</button>
+        </div>
       </footer>
       <div class="resize-grip left" aria-label="Redimensionar desde la izquierda"></div>
       <div class="resize-grip right" aria-label="Redimensionar desde la derecha"></div>

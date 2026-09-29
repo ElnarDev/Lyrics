@@ -2,6 +2,10 @@ function primaryArtist(byline) {
   return byline.split(/[•·]/)[0].split(/\s+(?:y|and|&|x|feat\.?|ft\.?|con)\s+|,\s+/i)[0].trim();
 }
 
+function creditedArtist(byline) {
+  return byline.split(/[•·]/)[0].trim();
+}
+
 function cleanTitle(title) {
   return title.trim().replace(/\s*[([]\s*(?:(?:feat(?:uring)?|ft|con)\.?\s+[^)\]]+)\s*[)\]]/gi, "").trim();
 }
@@ -63,6 +67,8 @@ function matchingScore(entry, track, result, aliasTitle = "") {
     !track.album || normalized(entry.albumName || "") !== normalized(track.album))) return null;
   let score = result.mode === "synced" ? 3 : 0;
   if (exactTitle) score += 1;
+  if (normalized(entry.artistName || "") === normalized(track.artist)) score += 5;
+  else if (normalized(entry.artistName || "") === normalized(creditedArtist(track.artist))) score += 3;
   if (track.album && entry.albumName && normalized(entry.albumName) === normalized(track.album)) score += 4;
   if (knownDuration && entryDuration > 0) score += 5 - Math.min(3, Math.abs(track.duration - entryDuration));
   return score;
@@ -75,51 +81,84 @@ function chooseResult(entries, track, aliasTitle = "") {
     const result = resultFromEntry(entry);
     if (!result) return [];
     const score = matchingScore(entry, track, result, aliasTitle);
-    return score === null ? [] : [{ result, score, content: entry.syncedLyrics || entry.plainLyrics }];
+    return score === null ? [] : [{ result, score, entry, content: entry.syncedLyrics || entry.plainLyrics }];
   }).sort((a, b) => b.score - a.score);
   if (!candidates.length) return { mode: "missing", lines: [] };
-  const best = candidates[0];
-  if (candidates.some((candidate) => candidate.score === best.score && candidate.content !== best.content)) {
+  const trustedSynced = candidates.filter(({ result, entry }) => result.mode === "synced" &&
+    ((track.duration > 0 && Number(entry.duration) > 0 && Math.abs(track.duration - Number(entry.duration)) <= 2) ||
+      (track.album && normalized(entry.albumName || "") === normalized(track.album))));
+  const ranked = trustedSynced.length ? trustedSynced : candidates;
+  const best = ranked[0];
+  if (ranked.some((candidate) => candidate.score === best.score && candidate.content !== best.content)) {
     return { mode: "ambiguous", lines: [] };
   }
   return best.result;
 }
 
 async function findLyrics(track, request = fetch) {
-  const artistName = primaryArtist(track.artist);
+  const artists = [...new Set([creditedArtist(track.artist), primaryArtist(track.artist)])];
   const titles = [...new Set([track.title.trim(), cleanTitle(track.title)])];
   const options = {
     headers: { "User-Agent": "LyricsOverlay/0.1 (local desktop prototype)" },
     signal: AbortSignal.timeout(4000),
   };
   const entries = [];
-  for (const candidate of titles) {
-    const params = new URLSearchParams({ track_name: candidate, artist_name: artistName });
-    if (track.album) params.set("album_name", track.album);
-    if (track.duration > 0) params.set("duration", String(track.duration));
-    const response = await request(`https://lrclib.net/api/get?${params}`, options);
-    if (response.status === 404) continue;
+  let originalResult = { mode: "missing", lines: [] };
+  for (const artistName of artists) {
+    for (const candidate of titles) {
+      const params = new URLSearchParams({ track_name: candidate, artist_name: artistName });
+      if (track.album) params.set("album_name", track.album);
+      if (track.duration > 0) params.set("duration", String(track.duration));
+      const response = await request(`https://lrclib.net/api/get?${params}`, options);
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error(`Lyrics provider returned ${response.status}`);
+      const entry = await response.json();
+      if (!matchesTrack(entry, track.title, track.artist)) continue;
+      const result = resultFromEntry(entry);
+      if (!result || matchingScore(entry, track, result) === null) continue;
+      entries.push(entry);
+      const albumMatches = !track.album || normalized(entry.albumName || "") === normalized(track.album);
+      const durationMatches = !track.duration || (Number(entry.duration) > 0 && Math.abs(track.duration - Number(entry.duration)) <= 2);
+      const artistMatches = normalized(entry.artistName || "") === normalized(artistName) || !track.album || !track.duration;
+      if (result.mode === "synced" && albumMatches && durationMatches && artistMatches) return result;
+    }
+    const params = new URLSearchParams({ track_name: cleanTitle(track.title), artist_name: artistName });
+    const response = await request(`https://lrclib.net/api/search?${params}`, options);
     if (!response.ok) throw new Error(`Lyrics provider returned ${response.status}`);
-    const entry = await response.json();
-    if (!matchesTrack(entry, track.title, track.artist)) continue;
-    const result = resultFromEntry(entry);
-    if (!result || matchingScore(entry, track, result) === null) continue;
-    entries.push(entry);
-    const albumMatches = !track.album || normalized(entry.albumName || "") === normalized(track.album);
-    const durationMatches = !track.duration || (Number(entry.duration) > 0 && Math.abs(track.duration - Number(entry.duration)) <= 2);
-    if (result.mode === "synced" && albumMatches && durationMatches) return result;
+    const entriesFromSearch = await response.json();
+    if (!Array.isArray(entriesFromSearch)) {
+      const error = new Error("Invalid lyrics search response");
+      error.name = "InvalidLyricsResponse";
+      throw error;
+    }
+    entries.push(...entriesFromSearch);
+    originalResult = chooseResult(entries, track);
+    if (originalResult.mode === "synced") return originalResult;
   }
-  const params = new URLSearchParams({ track_name: cleanTitle(track.title), artist_name: artistName });
-  const response = await request(`https://lrclib.net/api/search?${params}`, options);
-  if (!response.ok) throw new Error(`Lyrics provider returned ${response.status}`);
-  const entriesFromSearch = await response.json();
-  if (!Array.isArray(entriesFromSearch)) {
-    const error = new Error("Invalid lyrics search response");
-    error.name = "InvalidLyricsResponse";
-    throw error;
+
+  const artistName = artists[0];
+
+  if (track.album && track.duration > 0) {
+    const titleParams = new URLSearchParams({ track_name: cleanTitle(track.title) });
+    const titleResponse = await request(`https://lrclib.net/api/search?${titleParams}`, options);
+    if (!titleResponse.ok) throw new Error(`Lyrics provider returned ${titleResponse.status}`);
+    const titleEntries = await titleResponse.json();
+    if (!Array.isArray(titleEntries)) {
+      const error = new Error("Invalid lyrics search response");
+      error.name = "InvalidLyricsResponse";
+      throw error;
+    }
+    const expectedArtist = normalized(primaryArtist(track.artist));
+    const verifiedEntries = titleEntries.filter((entry) => {
+      const candidateArtist = typeof entry?.artistName === "string" ? normalized(entry.artistName) : "";
+      return candidateArtist && expectedArtist.startsWith(`${candidateArtist} `) &&
+        normalized(cleanTitle(entry.trackName || entry.name || "")) === normalized(cleanTitle(track.title)) &&
+        normalized(entry.albumName || "") === normalized(track.album) &&
+        Number(entry.duration) > 0 && Math.abs(track.duration - Number(entry.duration)) <= 2;
+    }).map((entry) => ({ ...entry, artistName: track.artist }));
+    const fallbackResult = chooseResult(verifiedEntries, track);
+    if (fallbackResult.mode === "synced" || fallbackResult.mode === "ambiguous") return fallbackResult;
   }
-  const originalResult = chooseResult([...entries, ...entriesFromSearch], track);
-  if (originalResult.mode === "synced") return originalResult;
 
   const aliasTitle = shortTitle(track.title);
   let aliasHasPlainLyrics = false;

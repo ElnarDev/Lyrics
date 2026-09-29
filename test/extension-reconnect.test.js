@@ -126,10 +126,13 @@ test("observes only the player bar and responds to song and media events", () =>
   const listeners = {};
   const bar = {};
   const page = { title: "First song", byline: "Artist" };
+  let timeReads = 0;
   let titleNode = { get textContent() { metadataReads += 1; return page.title; } };
   const bylineNode = { get textContent() { metadataReads += 1; return page.byline; } };
   const video = {
-    currentTime: 10, paused: false, duration: 180,
+    get currentTime() { timeReads += 1; return this.time; },
+    set currentTime(value) { this.time = value; },
+    time: 10, paused: false, duration: 180,
     addEventListener(name, callback) { listeners[name] = callback; },
     removeEventListener(name) { delete listeners[name]; },
   };
@@ -194,4 +197,10 @@ test("observes only the player bar and responds to song and media events", () =>
   video.paused = true;
   listeners.pause();
   assert.equal(connection.messages.at(-1).paused, true);
+  const readsWhilePaused = timeReads;
+  for (let i = 0; i < 10; i += 1) intervals[0].callback();
+  assert.equal(timeReads, readsWhilePaused, "paused polling must not read playback time");
+  video.paused = false;
+  listeners.play();
+  assert.equal(connection.messages.at(-1).paused, false);
 });

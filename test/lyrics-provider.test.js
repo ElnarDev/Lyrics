@@ -74,10 +74,12 @@ test("collaborating artist bylines search under the first artist", async () => {
   const urls = [];
   const request = async (url) => {
     urls.push(url);
+    if (url.includes("artist_name=Post+Malone+y+Swae+Lee")) return url.includes("/api/get?") ? response(404) : response(200, []);
     return response(200, { trackName: "Sunflower", artistName: "Post Malone", syncedLyrics: "[00:01.00] Song" });
   };
   await findLyrics({ title: "Sunflower", artist: "Post Malone y Swae Lee" }, request);
-  assert.match(urls[0], /artist_name=Post\+Malone(?:&|$)/);
+  assert.match(urls[0], /artist_name=Post\+Malone\+y\+Swae\+Lee/);
+  assert.ok(urls.some((url) => /artist_name=Post\+Malone(?:&|$)/.test(url)));
 });
 
 test("short-title match without album or duration is not trusted", async () => {
@@ -140,4 +142,66 @@ test("a mismatched exact response does not block a better searched recording", a
     syncedLyrics: "[00:01.00] Live" };
   const request = async (url) => response(200, url.includes("/api/search?") ? [studio, live] : studio);
   assert.deepEqual((await findLyrics(track, request)).lines, [{ time: 1, text: "Live" }]);
+});
+
+test("finds a shorter provider artist only with matching album and duration", async () => {
+  const track = { title: "Dios Mío Hasta Que Me Enamoré", artist: "Armonía 10 de Walther Lozada", album: "30 Años Armonia 10", duration: 190 };
+  const request = async (url) => {
+    if (url.includes("/api/get?")) return response(404);
+    if (url.includes("artist_name=")) return response(200, []);
+    return response(200, [
+      { trackName: track.title, artistName: "Armonia 10", albumName: "Otro álbum", duration: 190, syncedLyrics: "[00:01.00] Wrong" },
+      { trackName: track.title, artistName: "Armonia 10", albumName: track.album, duration: 190, syncedLyrics: "[00:02.00] Correct" },
+    ]);
+  };
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 2, text: "Correct" }] });
+});
+
+test("prefers the closest synced recording over an exact-album untimed entry", async () => {
+  const track = { title: "El Jardín Prohibido", artist: "Alex Bueno • Alex Bueno • 1990", album: "Alex Bueno", duration: 326 };
+  const plain = { trackName: track.title, artistName: "Alex Bueno", albumName: track.album,
+    duration: 326, plainLyrics: "Untimed" };
+  const synced = { trackName: track.title, artistName: "Alex Bueno, Alex Bueno, 1990",
+    albumName: "", duration: 326, syncedLyrics: "[00:01.00] Timed" };
+  const other = { trackName: track.title, artistName: "Alex Bueno", albumName: "Other album",
+    duration: 326, syncedLyrics: "[00:01.00] Other recording" };
+  const request = async (url) => response(200, url.includes("/api/get?") ? plain : [plain, other, synced]);
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 1, text: "Timed" }] });
+});
+
+test("a distant synced recording does not replace an untimed exact match", () => {
+  const track = { title: "Song", artist: "Artist", album: "Album", duration: 326 };
+  const result = chooseResult([
+    { trackName: "Song", artistName: "Artist", albumName: "Album", duration: 326, plainLyrics: "Untimed" },
+    { trackName: "Song", artistName: "Artist", albumName: "Other", duration: 331, syncedLyrics: "[00:01.00] Wrong" },
+  ], track);
+  assert.equal(result.mode, "plain");
+});
+
+test("equally close synced recordings remain ambiguous", () => {
+  const track = { title: "Song", artist: "Artist", album: "Album", duration: 326 };
+  const result = chooseResult([
+    { trackName: "Song", artistName: "Artist", albumName: "Album", duration: 326, plainLyrics: "Untimed" },
+    { trackName: "Song", artistName: "Artist", albumName: "Other A", duration: 326, syncedLyrics: "[00:01.00] A" },
+    { trackName: "Song", artistName: "Artist", albumName: "Other B", duration: 326, syncedLyrics: "[00:01.00] B" },
+  ], track);
+  assert.deepEqual(result, { mode: "ambiguous", lines: [] });
+});
+
+test("searches a band credit before shortening the artist name", async () => {
+  const track = { title: "Rebelión", artist: "Joe Arroyo y La Verdad • Musa Original • 1986",
+    album: "Musa Original", duration: 376 };
+  const urls = [];
+  const request = async (url) => {
+    urls.push(url);
+    if (url.includes("/api/get?")) return response(404);
+    return response(200, [
+      { trackName: track.title, artistName: "Joe Arroyo", albumName: track.album,
+        duration: 375, syncedLyrics: "[02:27.00] Wrong timing" },
+      { trackName: track.title, artistName: "Joe Arroyo y La Verdad", albumName: track.album,
+        duration: 375, syncedLyrics: "[01:10.00] Correct timing" },
+    ]);
+  };
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 70, text: "Correct timing" }] });
+  assert.match(urls[0], /artist_name=Joe\+Arroyo\+y\+La\+Verdad/);
 });

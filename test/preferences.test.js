@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { STORAGE_KEY, normalize, load, save } = require("../desktop/preferences");
+const { STORAGE_KEY, OFFSETS_KEY, normalize, load, save, loadOffset, saveOffset } = require("../desktop/preferences");
 
 function memoryStorage() {
   const values = new Map();
@@ -31,4 +31,18 @@ test("unavailable storage falls back to defaults without crashing", () => {
   const storage = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
   assert.deepEqual(load(storage), { windowOpacity: 92, lyricsOpacity: 100, fontSize: 27 });
   assert.equal(save(storage, { windowOpacity: 50 }), false);
+});
+
+test("sync offsets are saved per song and can be reset", () => {
+  const storage = memoryStorage();
+  assert.equal(saveOffset(storage, "song-a", .5), true);
+  assert.equal(saveOffset(storage, "song-b", -1), true);
+  assert.equal(loadOffset(storage, "song-a"), .5);
+  assert.equal(loadOffset(storage, "song-b"), -1);
+  assert.equal(saveOffset(storage, "song-a", 0), true);
+  assert.equal(loadOffset(storage, "song-a"), 0);
+  assert.equal(loadOffset(storage, "song-b"), -1);
+  assert.equal(saveOffset(storage, "song-b", 11), false);
+  storage.setItem(OFFSETS_KEY, "{invalid json");
+  assert.equal(loadOffset(storage, "song-b"), 0);
 });
