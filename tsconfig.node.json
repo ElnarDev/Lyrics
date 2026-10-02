@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    "src/shared/**/*.ts",
+    "src/desktop/bridge/**/*.ts",
+    "src/desktop/diagnostics/**/*.ts",
+    "src/desktop/lyrics/**/*.ts",
+    "src/desktop/main/**/*.ts",
+    "src/desktop/preload/**/*.ts",
+    "src/desktop/window/**/*.ts"
+  ]
+}

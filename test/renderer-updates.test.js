@@ -3,11 +3,14 @@ const { readFileSync } = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
-const preferences = require("../desktop/preferences");
+const preferences = require("../build/node/preferences");
 
 test("clock updates avoid repeated DOM changes and the tray restores appearance", () => {
   const callbacks = {};
   const timers = [];
+  const animationFrames = [];
+  const compactHeights = [];
+  const styles = new Map();
   const lyricRenders = [];
   const stored = new Map([[preferences.STORAGE_KEY,
     JSON.stringify({ windowOpacity: 0, lyricsOpacity: 15, fontSize: 16 })]]);
@@ -30,9 +33,9 @@ test("clock updates avoid repeated DOM changes and the tray restores appearance"
     set textContent(value) { artistWrites += 1; this.value = value; },
   };
   const controls = Object.fromEntries(["window-opacity", "lyrics-opacity", "font-size"]
-    .map((id) => [id, { value: "", addEventListener() {} }]));
+    .map((id) => [id, { value: "", addEventListener(name, callback) { this[name] = callback; } }]));
   const elements = {
-    "#lyrics": { clientHeight: 160, replaceChildren(...children) { lyricRenders.push(children); }, addEventListener() {} },
+    "#lyrics": { clientHeight: 160, scrollHeight: 100, replaceChildren(...children) { lyricRenders.push(children); }, addEventListener() {} },
     "#lyrics-announcement": announcement,
     "#overlay": {},
     "#title": title,
@@ -53,7 +56,7 @@ test("clock updates avoid repeated DOM changes and the tray restores appearance"
       querySelector(selector) { return elements[selector]; },
       querySelectorAll() { return []; },
       createElement() { return { className: "", textContent: "" }; },
-      documentElement: { style: { setProperty() {} } },
+      documentElement: { style: { setProperty(name, value) { styles.set(name, value); } } },
       body: { classList: { toggle() {} } },
     },
     window: {
@@ -63,11 +66,13 @@ test("clock updates avoid repeated DOM changes and the tray restores appearance"
         onPlayerUpdate(callback) { callbacks.player = callback; },
         onLyricsUpdate(callback) { callbacks.lyrics = callback; },
         onResetAppearance(callback) { callbacks.resetAppearance = callback; },
+        setCompactContentHeight(height) { compactHeights.push(height); },
       },
       LyricsPreferences: preferences,
       addEventListener(name, callback) { callbacks[name] = callback; },
     },
     getComputedStyle() { return { rowGap: "16px", paddingTop: "20px", paddingBottom: "20px" }; },
+    requestAnimationFrame(callback) { animationFrames.push(callback); },
     setTimeout(callback, delay) { timers.push({ callback, delay }); return timers.length; },
     clearTimeout() {},
     localStorage: {
@@ -75,8 +80,8 @@ test("clock updates avoid repeated DOM changes and the tray restores appearance"
       setItem: (key, value) => stored.set(key, value),
     },
   };
-  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "desktop", "renderer.js"), "utf8"), context);
-  assert.equal(controls["window-opacity"].value, 0);
+  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "build", "desktop", "renderer.js"), "utf8"), context);
+  assert.equal(controls["window-opacity"].value, "0");
   assert.equal(lyricRenders.length, 1);
   callbacks.lyrics({ status: "ready", lines: [{ time: 0, text: "First" }, { time: 10, text: "Second" }] });
   assert.equal(lyricRenders.length, 2);
@@ -123,10 +128,27 @@ test("clock updates avoid repeated DOM changes and the tray restores appearance"
   assert.match(lyricRenders.at(-1)[0].textContent, /LRCLIB/);
   assert.match(announcement.textContent, /LRCLIB/);
   callbacks.resetAppearance();
-  assert.equal(controls["window-opacity"].value, 92);
-  assert.equal(controls["lyrics-opacity"].value, 100);
-  assert.equal(controls["font-size"].value, 27);
+  assert.equal(controls["window-opacity"].value, "92");
+  assert.equal(controls["lyrics-opacity"].value, "100");
+  assert.equal(controls["font-size"].value, "27");
   assert.deepEqual(JSON.parse(stored.get(preferences.STORAGE_KEY)), {
     windowOpacity: 92, lyricsOpacity: 100, fontSize: 27,
   });
+  controls["font-size"].value = "32";
+  controls["font-size"].input();
+  assert.equal(styles.get("--font-size"), "32px");
+  assert.equal(JSON.parse(stored.get(preferences.STORAGE_KEY)).fontSize, 32);
+  callbacks.lyrics({ status: "ready", lines: [{ time: 0, text: "First" }] });
+  callbacks.keydown(keyEvent("ArrowUp"));
+  assert.equal(elements["#sync-toast"].hidden, false);
+  callbacks.player({ title: "Another song", artist: "Artist", currentTime: 0 });
+  assert.equal(elements["#sync-toast"].hidden, true);
+  assert.equal(elements["#compact-sync-offset"].textContent, "0 s");
+  callbacks.compact(true);
+  callbacks.compact(false);
+  animationFrames.shift()();
+  assert.deepEqual(compactHeights, []);
+  callbacks.compact(true);
+  animationFrames.shift()();
+  assert.deepEqual(compactHeights, [140]);
 });

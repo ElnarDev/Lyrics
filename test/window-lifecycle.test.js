@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { isUsableWindow, sendToWindow, showOrCreateWindow, toggleOrCreateWindow } = require("../desktop/window-lifecycle");
+const { isUsableWindow, sendToWindow, showOrCreateWindow, toggleOrCreateWindow } = require("../build/desktop/window-lifecycle");
 
 test("player updates never target a destroyed window or webContents", () => {
   const messages = [];
@@ -50,5 +50,16 @@ test("tray click hides and shows the same window without resetting its mode", ()
   assert.equal(created, 0);
   window.isDestroyed = () => true;
   assert.equal(toggleOrCreateWindow(window, create), "created");
+  assert.equal(created, 1);
+});
+
+test("recreates a window destroyed during show", () => {
+  let created = 0;
+  const window = {
+    isDestroyed: () => false,
+    webContents: { isDestroyed: () => false },
+    show: () => { throw new Error("destroyed"); },
+  };
+  assert.equal(showOrCreateWindow(window, () => { created += 1; }), "created");
   assert.equal(created, 1);
 });

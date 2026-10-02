@@ -46,10 +46,15 @@ test("resends an unchanged paused track after reconnecting", () => {
     setInterval() {},
     setTimeout(callback) { reconnect = callback; },
   };
-  const source = readFileSync(path.join(__dirname, "..", "extension", "content.js"), "utf8");
+  const source = readFileSync(path.join(__dirname, "..", "build", "extension", "content.js"), "utf8");
   vm.runInNewContext(source, context);
   connections[0].open();
   assert.deepEqual(connections[0].messages, [{ type: "auth", token: "a".repeat(64) }]);
+  connections[0].onmessage({ data: "{invalid" });
+  connections[0].onmessage({ data: "null" });
+  connections[0].onmessage({ data: JSON.stringify({ type: "compatible" }) });
+  connections[0].onmessage({ data: JSON.stringify({ type: "ready", protocolVersion: 1, unexpected: true }) });
+  assert.equal(connections[0].messages.length, 1);
   connections[0].ready();
   assert.equal(connections[0].messages.length, 3);
   assert.deepEqual(connections[0].messages[1], { type: "hello", protocolVersion: 1 });
@@ -74,7 +79,7 @@ test("waits for pairing and connects when the key is saved", () => {
     WebSocket: FakeWebSocket,
     chrome: {
       storage: {
-        local: { get(_key, callback) { callback({}); } },
+        local: { get(_key, callback) { callback({ bridgeToken: 42 }); } },
         onChanged: { addListener(callback) { storageListener = callback; } },
       },
     },
@@ -82,11 +87,39 @@ test("waits for pairing and connects when the key is saved", () => {
     MutationObserver: class { observe() {} disconnect() {} },
     setInterval() {},
   };
-  const source = readFileSync(path.join(__dirname, "..", "extension", "content.js"), "utf8");
+  const source = readFileSync(path.join(__dirname, "..", "build", "extension", "content.js"), "utf8");
   vm.runInNewContext(source, context);
   assert.equal(connections.length, 0);
   storageListener({ bridgeToken: { newValue: "a".repeat(64) } }, "local");
   assert.equal(connections.length, 1);
+});
+
+test("a token change invalidates a reconnect scheduled with the previous token", () => {
+  const connections = [];
+  const timers = [];
+  let storageListener;
+  class FakeWebSocket {
+    constructor() { connections.push(this); }
+    close() { this.onclose(); }
+  }
+  const context = {
+    WebSocket: FakeWebSocket,
+    chrome: { storage: {
+      local: { get(_key, callback) { callback({ bridgeToken: "a".repeat(64) }); } },
+      onChanged: { addListener(callback) { storageListener = callback; } },
+    } },
+    document: { querySelector() { return null; } },
+    MutationObserver: class { observe() {} disconnect() {} },
+    setInterval() {},
+    setTimeout(callback, delay) { timers.push({ callback, delay }); },
+  };
+  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "build", "extension", "content.js"), "utf8"), context);
+  connections[0].close();
+  assert.equal(timers.at(-1).delay, 3000);
+  storageListener({ bridgeToken: { newValue: "b".repeat(64) } }, "local");
+  assert.equal(connections.length, 2);
+  timers.at(-1).callback();
+  assert.equal(connections.length, 2);
 });
 
 test("an older desktop app cannot receive player data and is retried after update", () => {
@@ -110,7 +143,7 @@ test("an older desktop app cannot receive player data and is retried after updat
     setInterval() {},
     setTimeout(callback, delay) { timers.push({ callback, delay }); },
   };
-  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "extension", "content.js"), "utf8"), context);
+  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "build", "extension", "content.js"), "utf8"), context);
   connections[0].open();
   connections[0].onmessage({ data: JSON.stringify({ type: "ready" }) });
   assert.equal(connections[0].messages.length, 1);
@@ -172,7 +205,7 @@ test("observes only the player bar and responds to song and media events", () =>
     setTimeout(callback) { scheduled.push(callback); },
     clearTimeout() {},
   };
-  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "extension", "content.js"), "utf8"), context);
+  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "build", "extension", "content.js"), "utf8"), context);
   assert.deepEqual(observations, [bar, titleNode, bylineNode]);
   assert.deepEqual(intervals.map((interval) => interval.ms), [750, 2000]);
   assert.equal(metadataReads, 2);

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const WebSocket = require("ws");
-const { PROTOCOL_VERSION, startPlayerBridge } = require("../desktop/player-bridge");
+const { PROTOCOL_VERSION, startPlayerBridge } = require("../build/desktop/player-bridge");
 
 test("local bridge authenticates before accepting player updates", async (t) => {
   const sent = [];

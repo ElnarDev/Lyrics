@@ -1,8 +1,10 @@
 # Integración continua
 
+Durante la migración, `npm test` ejecuta primero `npm run build` y después solo `test/*.test.js`. Esto genera `build/desktop` y `build/extension`, comprueba sus recursos con `test/build-output.test.js` y las fronteras entre módulos TypeScript con `test/architecture-boundaries.test.js`, sin recoger pruebas de copias aisladas en `out/`. El instalador también ejecuta el build antes de empaquetar.
+
 El flujo `.github/workflows/ci.yml` se ejecuta al subir cambios, al abrir o actualizar una solicitud de cambios y manualmente desde GitHub Actions. Comprueba Windows con Node.js 22 y 24.
 
-Cada ejecución instala exactamente las dependencias del archivo de bloqueo (`npm ci`), revisa la sintaxis (`npm run check`) y ejecuta las pruebas (`npm test`). La variante Node 24 hace además una auditoría de dependencias que falla a partir de avisos moderados. El flujo solo necesita permiso de lectura del repositorio y cancela ejecuciones anteriores de la misma rama para no gastar recursos innecesariamente.
+Cada ejecución instala exactamente las dependencias del archivo de bloqueo (`npm ci`) y ejecuta `npm run verify`: tipos de shared, Node/Electron, renderer y extensión → build y sintaxis → pruebas. Este comando construye una sola vez. `pack:win` e `installer:win` exigen la misma verificación antes de llamar a electron-builder. La variante Node 24 hace además una auditoría de dependencias que falla a partir de avisos moderados. El flujo solo necesita permiso de lectura del repositorio y cancela ejecuciones anteriores de la misma rama para no gastar recursos innecesariamente.
 
 `--ignore-scripts` evita descargar y ejecutar el binario de Electron durante estas pruebas puramente de código. Por ello, un resultado verde no demuestra que el instalador o la interfaz gráfica funcionen: esas verificaciones aún requieren un flujo de empaquetado y pruebas de aplicación en Windows.
 

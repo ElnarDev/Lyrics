@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { LyricsCache } = require("../desktop/lyrics-cache");
+const { LyricsCache } = require("../build/desktop/lyrics-cache");
 
 test("coalesces simultaneous lookups and reuses synced lyrics until expiry", async () => {
   let now = 1000;

@@ -1,11 +1,12 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { createDiagnostics } = require("../desktop/diagnostics");
+const { createDiagnostics } = require("../build/desktop/diagnostics");
 
 test("diagnostic report accepts only known codes and excludes supplied private text", () => {
   const diagnostics = createDiagnostics({ now: () => new Date("2026-09-28T12:00:00Z") });
   const privateText = "Song title, lyrics and bridge-token";
   assert.equal(diagnostics.record(`lyrics-error: ${privateText}`), false);
+  assert.equal(diagnostics.record({ code: "lyrics-error", token: privateText }), false);
   assert.equal(diagnostics.record("lyrics-offline"), true);
   const report = diagnostics.report("0.1.0", "win32");
   assert.deepEqual(JSON.parse(report).events, [

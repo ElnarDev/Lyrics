@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { MAX_PLAYER_MESSAGE_BYTES, isAllowedPlayerOrigin, parsePlayerMessage } = require("../desktop/player-message");
+const { MAX_PLAYER_MESSAGE_BYTES, isAllowedPlayerOrigin, parsePlayerMessage } = require("../build/desktop/player-message");
 
 const valid = { title: "Song", artist: "Artist", currentTime: 12.5, paused: false };
 const encode = (value) => Buffer.from(JSON.stringify(value));

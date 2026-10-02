@@ -3,17 +3,24 @@
   "version": "0.1.0",
   "description": "Ventana flotante de letras sincronizadas para YouTube Music",
   "productName": "Lyrics",
-  "main": "desktop/main.js",
+  "main": "build/desktop/main.js",
   "scripts": {
-    "start": "electron .",
-    "pack:win": "electron-builder --win --x64 --dir",
-    "installer:win": "electron-builder --win nsis --x64",
-    "check": "node --check desktop/main.js && node --check desktop/preload.js && node --check desktop/renderer.js && node --check desktop/preferences.js && node --check desktop/bridge-auth.js && node --check desktop/diagnostics.js && node --check desktop/player-bridge.js && node --check desktop/player-message.js && node --check desktop/player-sources.js && node --check desktop/lyrics-errors.js && node --check desktop/lyrics-provider.js && node --check desktop/lyrics-cache.js && node --check desktop/lyrics-session.js && node --check desktop/window-bounds.js && node --check desktop/window-state.js && node --check desktop/window-lifecycle.js && node --check extension/content.js && node --check extension/popup.js",
-    "test": "node --test"
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.shared.json && tsc -p tsconfig.node.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.extension.json",
+    "build": "node scripts/build.mjs",
+    "verify": "npm run typecheck && npm run check && node --test test/*.test.js",
+    "pack:win": "npm run verify && electron-builder --win --x64 --dir",
+    "installer:win": "npm run verify && electron-builder --win nsis --x64",
+    "check": "npm run build && node --check build/desktop/main.js && node --check build/desktop/preload.js && node --check build/desktop/renderer.js && node --check build/desktop/preferences.js && node --check build/extension/content.js && node --check build/extension/popup.js",
+    "test": "npm run build && node --test test/*.test.js"
   },
   "devDependencies": {
+    "@types/node": "24.19.0",
+    "@types/ws": "8.18.2",
     "electron": "^44.4.5",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "ws": "^8.18.1"
@@ -24,10 +31,12 @@
   "build": {
     "appId": "app.lyrics.overlay",
     "asar": true,
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "files": [
-      "desktop/**/*",
-      "assets/tray-icon.png",
+      "build/desktop/**/*",
+      "build/assets/tray-icon.png",
       "package.json"
     ],
     "win": {

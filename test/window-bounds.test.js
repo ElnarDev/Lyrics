@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { fitWindowBounds, restoreNormalBounds, resizeWindowBounds, keepWindowReachable } = require("../desktop/window-bounds");
+const { fitWindowBounds, restoreNormalBounds, resizeWindowBounds, keepWindowReachable } = require("../build/desktop/window-bounds");
 
 test("leaving compact mode keeps the compact window's new position", () => {
   const normal = { x: 100, y: 120, width: 520, height: 430 };

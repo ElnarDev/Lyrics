@@ -31,10 +31,8 @@ jobs:
           cache: npm
       - name: Instalar dependencias del archivo de bloqueo
         run: npm ci --ignore-scripts
-      - name: Comprobar sintaxis
-        run: npm run check
-      - name: Ejecutar pruebas
-        run: npm test
+      - name: Comprobar tipos, construir y ejecutar pruebas
+        run: npm run verify
       - name: Revisar avisos de dependencias
         if: matrix.node == 24
         run: npm audit --audit-level=moderate

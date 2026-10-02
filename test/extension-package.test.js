@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const extension = path.join(__dirname, "..", "extension");
+const extension = path.join(__dirname, "..", "build", "extension");
 const manifest = JSON.parse(fs.readFileSync(path.join(extension, "manifest.json"), "utf8"));
 
 test("extension package contains its popup, content script and every declared icon", () => {

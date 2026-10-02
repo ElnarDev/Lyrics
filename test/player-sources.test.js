@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { PlayerSources } = require("../desktop/player-sources");
+const { PlayerSources } = require("../build/desktop/player-sources");
 
 const track = (title, paused = false, currentTime = 0) => ({ title, artist: "Artist", paused, currentTime });
 

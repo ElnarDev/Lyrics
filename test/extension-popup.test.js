@@ -20,6 +20,8 @@ function runPopup(initialToken = "") {
       this.onmessage({ data: JSON.stringify({ type: "compatible" }) });
     }
     oldApp() { this.onmessage({ data: JSON.stringify({ type: "ready" }) }); }
+    newerApp() { this.onmessage({ data: JSON.stringify({ type: "ready", protocolVersion: 2 }) }); }
+    malformed() { this.onmessage({ data: "null" }); this.onmessage({ data: "{invalid" }); }
     reject() { this.onclose({ code: 1008 }); }
     incompatible() { this.onclose({ code: 4002 }); }
   }
@@ -37,7 +39,7 @@ function runPopup(initialToken = "") {
       runtime: { lastError: null },
     },
   };
-  const source = readFileSync(path.join(__dirname, "..", "extension", "popup.js"), "utf8");
+  const source = readFileSync(path.join(__dirname, "..", "build", "extension", "popup.js"), "utf8");
   vm.runInNewContext(source, context);
   return { elements, connections };
 }
@@ -52,6 +54,10 @@ test("saved key hides pairing instructions and shows confirmed connection only a
   assert.match(elements.status.textContent, /comprobando/);
   connections[0].open();
   assert.equal(connections[0].sent[0].token, token);
+  connections[0].onmessage({ data: JSON.stringify({ type: "compatible" }) });
+  connections[0].onmessage({ data: JSON.stringify({ type: "ready", protocolVersion: 1, unexpected: true }) });
+  assert.notEqual(elements.heading.textContent, "Lyrics conectado");
+  assert.equal(connections[0].sent.length, 1);
   connections[0].ready();
   assert.equal(elements.heading.textContent, "Lyrics conectado");
   assert.deepEqual(connections[0].sent[1], { type: "hello", protocolVersion: 1 });
@@ -74,6 +80,21 @@ test("an incompatible extension shows its own update message", () => {
   connections[0].ready();
   connections[0].incompatible();
   assert.match(elements.status.textContent, /Actualízala en Chrome/);
+});
+
+test("newer protocol and malformed bridge data never confirm connection", () => {
+  const { elements, connections } = runPopup("a".repeat(64));
+  connections[0].open();
+  connections[0].malformed();
+  assert.notEqual(elements.heading.textContent, "Lyrics conectado");
+  connections[0].newerApp();
+  assert.match(elements.status.textContent, /Actualízala en Chrome/);
+});
+
+test("invalid stored token type leaves the popup unpaired", () => {
+  const { elements, connections } = runPopup(42);
+  assert.equal(elements.heading.textContent, "Vincular Lyrics");
+  assert.equal(connections.length, 0);
 });
 
 test("unpaired user can save a key and switch to connection status", () => {

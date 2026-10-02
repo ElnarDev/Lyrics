@@ -1,10 +1,67 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { cleanTitle, shortTitle, chooseResult, findLyrics } = require("../desktop/lyrics-provider");
+const { cleanTitle, shortTitle, chooseResult, findLyrics } = require("../build/desktop/lyrics-provider");
 
 function response(status, data) {
   return { status, ok: status === 200, json: async () => data };
 }
+
+test("un exacto con crédito incompleto no oculta la colaboración de Lo Que No Sabes Tú", async () => {
+  const track = { title: "Lo Que No Sabes Tú (con El Potro Álvarez)",
+    artist: "Chino & Nacho y Baroni · Mi Niña Bonita (International Version) · 2010",
+    album: "Mi Niña Bonita (International Version)", duration: 234 };
+  const incomplete = { trackName: "Lo Que No Sabes Tú", artistName: "Chino & Nacho",
+    albumName: track.album, duration: 234, syncedLyrics: "[00:01.00] Incompleta" };
+  const complete = { ...incomplete, artistName: "Chino & Nacho/Baroni/El Potro Alvarez",
+    duration: 232, syncedLyrics: "[00:02.00] Colaboración" };
+  const urls = [];
+  const request = async (url) => {
+    urls.push(url);
+    return url.includes("/api/get?") ? response(200, incomplete) : response(200, [incomplete, complete]);
+  };
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 2, text: "Colaboración" }] });
+  assert.ok(urls.some((url) => url.includes("/api/search?")));
+});
+
+test("rejects a malformed LRCLIB search response", async () => {
+  const request = async (url) => response(200, url.includes("/api/get?") ? null : { error: "bad response" });
+  await assert.rejects(findLyrics({ title: "Song", artist: "Artist" }, request),
+    { name: "InvalidLyricsResponse" });
+});
+
+test("reports an HTTP provider failure without treating it as missing lyrics", async () => {
+  const request = async () => response(503);
+  await assert.rejects(findLyrics({ title: "Song", artist: "Artist" }, request),
+    /Lyrics provider returned 503/);
+});
+
+test("an unavailable exact lookup can use verified search results", async () => {
+  const track = { title: "Song", artist: "Artist", album: "Album", duration: 200 };
+  const entry = { trackName: "Song", artistName: "Artist", albumName: "Album", duration: 200,
+    syncedLyrics: "[00:01.00] Search result" };
+  const request = async (url) => url.includes("/api/get?") ? response(503) : response(200, [entry]);
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 1, text: "Search result" }] });
+});
+
+test("an empty search does not hide an unavailable exact lookup", async () => {
+  const request = async (url) => url.includes("/api/get?") ? response(503) : response(200, []);
+  await assert.rejects(findLyrics({ title: "Song", artist: "Artist" }, request), /Lyrics provider returned 503/);
+});
+
+test("la consulta amplia recupera un 503 sin aceptar al miembro aislado del dúo", async () => {
+  const track = { title: "Song (con Guest)", artist: "First & Second y Third", album: "Album", duration: 200 };
+  const request = async (url) => {
+    const params = new URL(url).searchParams;
+    if (url.includes("/api/get?") || params.get("artist_name") !== "First") return response(503);
+    return response(200, [
+      { trackName: "Song (con Guest)", artistName: "First", albumName: "Album", duration: 200,
+        syncedLyrics: "[00:01.00] Miembro aislado" },
+      { trackName: "Song", artistName: "First/Second/Third/Guest", albumName: "Album", duration: 200,
+        syncedLyrics: "[00:02.00] Colaboración" },
+    ]);
+  };
+  assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 2, text: "Colaboración" }] });
+});
 
 test("removes localized guest-credit suffix without changing the song title", () => {
   assert.equal(cleanTitle("Till I Collapse (con Nate Dogg)"), "Till I Collapse");
@@ -155,6 +212,37 @@ test("finds a shorter provider artist only with matching album and duration", as
     ]);
   };
   assert.deepEqual(await findLyrics(track, request), { mode: "synced", lines: [{ time: 2, text: "Correct" }] });
+});
+
+test("la búsqueda exacta y el fallback de artista no aceptan duraciones coercibles", async () => {
+  const track = { title: "Song", artist: "Artist Extended", album: "Album", duration: 200 };
+  const malformed = { trackName: "Song", artistName: "Artist Extended", albumName: "Album",
+    duration: [200], syncedLyrics: "[00:01.00] Incorrecta" };
+  const request = async (url) => url.includes("/api/get?") ? response(200, malformed) :
+    response(200, url.includes("artist_name=") ? [] : [{ ...malformed, artistName: "Artist" }]);
+  assert.deepEqual(await findLyrics(track, request), { mode: "missing", lines: [] });
+});
+
+test("el fallback por título no reintroduce al miembro aislado del dúo", async () => {
+  const track = { title: "Lo Que No Sabes Tú (con El Potro Álvarez)",
+    artist: "Chino & Nacho y Baroni", album: "Mi Niña Bonita (International Version)", duration: 234 };
+  const request = async (url) => {
+    if (url.includes("/api/get?")) return response(404);
+    return response(200, url.includes("artist_name=") ? [] : [{ trackName: track.title,
+      artistName: "Chino", albumName: track.album, duration: 234, syncedLyrics: "[00:01.00] Incorrecta" }]);
+  };
+  assert.deepEqual(await findLyrics(track, request), { mode: "missing", lines: [] });
+});
+
+test("la validación de identidad también se aplica al fallback de artista abreviado", async () => {
+  const track = { title: "Song", artist: "Artist Extended", album: "Album", duration: 200 };
+  for (const extra of [{ artistName: "Artist" + " ".repeat(500) }, { name: 123 },
+    { name: "x".repeat(301) }]) {
+    const request = async (url) => url.includes("/api/get?") ? response(404) : response(200,
+      url.includes("artist_name=") ? [] : [{ trackName: track.title, artistName: "Artist",
+        albumName: track.album, duration: 200, syncedLyrics: "[00:01.00] Incorrecta", ...extra }]);
+    assert.deepEqual(await findLyrics(track, request), { mode: "missing", lines: [] });
+  }
 });
 
 test("prefers the closest synced recording over an exact-album untimed entry", async () => {
